@@ -54,4 +54,27 @@ public class PasteBinService {
         return snippet;
     }
 
+    public boolean updateSnippet(String uniqueLink, String content) {
+        // System.out.println("Attempting to update snippet with uniqueLink: {}  "  + uniqueLink);
+
+        // Find the snippet by uniqueLink
+        Optional<PasteBin> optionalSnippet = pasteRepository.findByUniqueLink(uniqueLink);
+
+        if (optionalSnippet.isPresent()) {
+            // System.out.println("Snippet found with uniqueLink: {}" + uniqueLink);
+
+            PasteBin snippet = optionalSnippet.get();
+            // logger.debug("Current content: {}", snippet.getContent());
+
+            snippet.setContent(content);  // Update the content
+            pasteRepository.save(snippet);  // Save the updated snippet to the database
+
+            // logger.debug("Updated snippet saved with new content: {}", content);
+            return true;
+        } else {
+            // System.out.println("Snippet not found with uniqueLink: {}"+ uniqueLink);
+            return false;
+        }
+    }
+
 }
