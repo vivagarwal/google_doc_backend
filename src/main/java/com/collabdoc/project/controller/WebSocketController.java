@@ -1,6 +1,5 @@
-package com.pastebin.project.controller;
+package com.collabdoc.project.controller;
 
-import org.springframework.lang.Nullable;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Controller;
 import org.springframework.messaging.handler.annotation.MessageMapping;

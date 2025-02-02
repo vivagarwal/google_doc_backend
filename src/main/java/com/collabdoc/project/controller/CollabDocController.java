@@ -1,8 +1,8 @@
-package com.pastebin.project.controller;
+package com.collabdoc.project.controller;
 
 
-import com.pastebin.project.model.PasteBin;
-import com.pastebin.project.service.PasteBinService;
+import com.collabdoc.project.model.CollabDoc;
+import com.collabdoc.project.service.CollabDocService;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -11,36 +11,33 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 
 
 @RestController
 @RequestMapping("/api/snippets")
-public class PasteBinController {
+public class CollabDocController {
 
-    private final PasteBinService pasteBinService;
+    private final CollabDocService collabDocService;
 
-    public PasteBinController(PasteBinService pasteBinService){
-        this.pasteBinService=pasteBinService;
+    public CollabDocController(CollabDocService collabDocService){
+        this.collabDocService=collabDocService;
     }
 
     // POST: Create a new snippet
     @PostMapping("/create")
-    public ResponseEntity<PasteBin> createSnippet(@RequestBody PasteBin snippet) {
-        return ResponseEntity.ok(pasteBinService.createSnippet(snippet));
+    public ResponseEntity<CollabDoc> createSnippet(@RequestBody CollabDoc snippet) {
+        return ResponseEntity.ok(collabDocService.createSnippet(snippet));
     }
 
     // GET: Retrieve a snippet using its unique link
     @GetMapping("/view/{uniqueLink}")
     public ResponseEntity<Map<String, String>> getSnippet(@PathVariable String uniqueLink) {
-        Optional<PasteBin> snippet = pasteBinService.getSnippet(uniqueLink);
+        Optional<CollabDoc> snippet = collabDocService.getSnippet(uniqueLink);
 
         return snippet
-                .map(pasteBin -> {
+                .map(collabDoc -> {
                     Map<String, String> response = new HashMap<>();
-                    response.put("content", pasteBin.getContent());
+                    response.put("content", collabDoc.getContent());
                     return ResponseEntity.ok(response);
                 })
                 .orElse(ResponseEntity.notFound().build());
@@ -49,11 +46,11 @@ public class PasteBinController {
     @PutMapping("/update/{uniqueLink}")
     public ResponseEntity<String> updateSnippet(
         @PathVariable String uniqueLink,
-        @RequestBody PasteBin snippetPayload) {
+        @RequestBody CollabDoc snippetPayload) {
 
     // System.out.println(uniqueLink);
     // System.out.println(snippetPayload.getContent());
-    boolean isUpdated = pasteBinService.updateSnippet(uniqueLink, snippetPayload.getContent());
+    boolean isUpdated = collabDocService.updateSnippet(uniqueLink, snippetPayload.getContent());
 
     if (isUpdated) {
         return ResponseEntity.ok("Snippet updated successfully.");

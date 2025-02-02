@@ -1,13 +1,13 @@
-package com.pastebin;
+package com.collabdoc;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class PastebinApplication {
+public class CollabDocApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(PastebinApplication.class, args);
+		SpringApplication.run(CollabDocApplication.class, args);
 	}
 
 }
