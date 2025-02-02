@@ -15,12 +15,6 @@ public class CollabDoc {
 
     private LocalDateTime createdAt;
 
-    private LocalDateTime expirationTime;  // Can be null if no expiration is set
-
-    private Integer accessLimit;  // Max allowed views (nullable)
-
-    private Integer currentViews = 0;  // Initialized to 0
-
     private String uniqueLink;
 
     public String getId() {
@@ -46,31 +40,7 @@ public class CollabDoc {
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
     }
-
-    public LocalDateTime getExpirationTime() {
-        return expirationTime;
-    }
-
-    public void setExpirationTime(LocalDateTime expirationTime) {
-        this.expirationTime = expirationTime;
-    }
-
-    public Integer getAccessLimit() {
-        return accessLimit;
-    }
-
-    public void setAccessLimit(Integer accessLimit) {
-        this.accessLimit = accessLimit;
-    }
-
-    public Integer getCurrentViews() {
-        return currentViews;
-    }
-
-    public void setCurrentViews(Integer currentViews) {
-        this.currentViews = currentViews;
-    }
-
+    
     public String getUniqueLink() {
         return uniqueLink;
     }

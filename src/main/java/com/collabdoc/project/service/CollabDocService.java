@@ -33,22 +33,6 @@ public class CollabDocService {
         Optional<CollabDoc> snippet = collabRepository.findByUniqueLink(uniqueLink);
 
         if (snippet.isPresent()) {
-            // Check expiration
-            if (snippet.get().getExpirationTime() != null &&
-                    snippet.get().getExpirationTime().isBefore(LocalDateTime.now())) {
-                collabRepository.delete(snippet.get());
-                return Optional.empty();
-            }
-
-            // Check view limit
-            if (snippet.get().getAccessLimit() != null &&
-                    snippet.get().getCurrentViews() >= snippet.get().getAccessLimit()) {
-                collabRepository.delete(snippet.get());
-                return Optional.empty();
-            }
-
-            // Increment views and save
-            snippet.get().setCurrentViews(snippet.get().getCurrentViews() + 1);
             collabRepository.save(snippet.get());
         }
         return snippet;
