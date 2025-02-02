@@ -1,0 +1,73 @@
+# Maven or Gradle build outputs
+/target/
+/build/
+
+/out/
+
+# IntelliJ IDEA
+/.idea/
+/*.iml
+
+# VS Code
+.vscode/
+
+# Eclipse specific files
+/.classpath
+/.project
+/.settings/
+
+# Temporary files
+*.log
+*.tmp
+*.bak
+*.swp
+*.DS_Store
+
+# Compiled files
+*.class
+
+# Operating System files
+Thumbs.db
+.DS_Store
+
+# Spring Boot specific files
+.env
+#application.properties
+#application.yml
+
+# Database and cache
+*.h2.db
+*.mv.db
+*.db
+*.log.db
+
+# Dependency directories
+# Ignore everything under .mvn
+/.mvn/*
+
+# Allow only the wrapper directory
+!.mvn/wrapper/
+
+# Inside .mvn/wrapper, ignore everything except maven-wrapper.properties
+.mvn/wrapper/*
+!.mvn/wrapper/maven-wrapper.properties
+
+/node_modules/
+
+# Logs
+logs/
+*.log
+
+# IDE index files
+/.idea/
+/*.iml
+
+# Docker related
+docker-compose.override.yml
+
+# Security sensitive files
+/keystore
+/secrets/
+
+# System file backups
+*.old
