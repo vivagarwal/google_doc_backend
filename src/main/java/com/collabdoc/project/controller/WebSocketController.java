@@ -34,12 +34,14 @@ public class WebSocketController {
     public String broadcastSnippetEdit(@Payload(required = false) String updatedContent, @DestinationVariable String uniqueLink) {
         if (updatedContent == null) {
             logger.info("Received null content. Broadcasting empty content.");
+            inMemoryEdits.put(uniqueLink, "");
             return "";
         }
 
         // Check for whitespace-only content
         if (updatedContent.trim().isEmpty()) {
             logger.info("Received whitespace-only content. Broadcasting empty content.");
+            inMemoryEdits.put(uniqueLink, "");
             return "";
         }
 
@@ -53,7 +55,7 @@ public class WebSocketController {
     public void persistEditsPeriodically() {
         // System.out.println("Called scheduled");
         inMemoryEdits.forEach((uniqueLink, content) -> {
-            // System.out.println(uniqueLink+":\t"+content);
+            // Systcem.out.println(uniqueLink+":\t"+content);
             boolean flag = collabDocService.updateSnippet(uniqueLink, content);
             if(flag)
                 logger.info("Persisted snippet {} to database.", uniqueLink);
