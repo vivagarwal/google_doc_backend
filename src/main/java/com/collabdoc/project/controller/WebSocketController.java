@@ -51,16 +51,16 @@ public class WebSocketController {
         return updatedContent;
     }
 
-    @Scheduled(fixedRate = 5*1000) //5 secs
+    @Scheduled(fixedRate = 30*1000) //5 secs
     public void persistEditsPeriodically() {
         // System.out.println("Called scheduled");
         inMemoryEdits.forEach((uniqueLink, content) -> {
-            // Systcem.out.println(uniqueLink+":\t"+content);
+            // System.out.println(uniqueLink+":\t"+content);
             boolean flag = collabDocService.updateSnippet(uniqueLink, content);
             if(flag)
-                logger.info("Persisted snippet {} to database.", uniqueLink);
+                logger.info("Persisted snippet {} to the database.", uniqueLink);
             else
-                logger.info("Persisted not snippet {} to database.", uniqueLink);
+                logger.error("Failed to persist snippet {}.", uniqueLink);
         });
         inMemoryEdits.clear();  // Clear memory after persisting
     }
@@ -76,6 +76,15 @@ public class WebSocketController {
     public static class EditMessage {
         private String contentDelta;
         private int cursorPosition;
+        private String sessionId;
+
+        public String getSessionId() {
+            return sessionId;
+        }
+
+        public void setSessionId(String sessionId) {
+            this.sessionId = sessionId;
+        }
 
         public String getContentDelta() {
             return contentDelta;
@@ -96,8 +105,8 @@ public class WebSocketController {
 
     @MessageMapping("/snippets/edit-delta/{uniqueLink}")
     @SendTo("/topic/snippets-delta/{uniqueLink}")
-    public EditMessage broadcastCharacterEdit(@Payload(required = false) EditMessage editMessage) {
-        logger.info("[CHAR-LEVEL UPDATE] Delta: '{}', Position: {}", editMessage.getContentDelta(), editMessage.getCursorPosition());
+    public EditMessage broadcastCharacterEdit(@Payload EditMessage editMessage) {
+        logger.info("[RECEIVED DELTA] Delta: '{}', Position: {}, Session ID: {}", editMessage.getContentDelta(), editMessage.getCursorPosition(), editMessage.getSessionId());
         return editMessage;
     }
 }
