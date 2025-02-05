@@ -77,6 +77,15 @@ public class WebSocketController {
         private String contentDelta;
         private int cursorPosition;
         private String sessionId;
+        private Boolean deleteOperation;
+
+        public Boolean getDeleteOperation() {
+            return deleteOperation;
+        }
+
+        public void setDeleteOperation(Boolean deleteOperation) {
+            this.deleteOperation = deleteOperation;
+        }
 
         public String getSessionId() {
             return sessionId;
@@ -106,7 +115,7 @@ public class WebSocketController {
     @MessageMapping("/snippets/edit-delta/{uniqueLink}")
     @SendTo("/topic/snippets-delta/{uniqueLink}")
     public EditMessage broadcastCharacterEdit(@Payload EditMessage editMessage) {
-        logger.info("[RECEIVED DELTA] Delta: '{}', Position: {}, Session ID: {}", editMessage.getContentDelta(), editMessage.getCursorPosition(), editMessage.getSessionId());
+        logger.info("[RECEIVED DELTA] Delta: '{}', Position: {}, Session ID: {} , Delete: {}", editMessage.getContentDelta(), editMessage.getCursorPosition(), editMessage.getSessionId(),editMessage.getDeleteOperation());
         return editMessage;
     }
 }
