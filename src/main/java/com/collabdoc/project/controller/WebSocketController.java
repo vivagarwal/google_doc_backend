@@ -72,4 +72,32 @@ public class WebSocketController {
 
         persistEditsPeriodically();
     }
+
+    public static class EditMessage {
+        private String contentDelta;
+        private int cursorPosition;
+
+        public String getContentDelta() {
+            return contentDelta;
+        }
+
+        public void setContentDelta(String contentDelta) {
+            this.contentDelta = contentDelta;
+        }
+
+        public int getCursorPosition() {
+            return cursorPosition;
+        }
+
+        public void setCursorPosition(int cursorPosition) {
+            this.cursorPosition = cursorPosition;
+        }
+    }
+
+    @MessageMapping("/snippets/edit-delta/{uniqueLink}")
+    @SendTo("/topic/snippets-delta/{uniqueLink}")
+    public EditMessage broadcastCharacterEdit(@Payload(required = false) EditMessage editMessage) {
+        logger.info("[CHAR-LEVEL UPDATE] Delta: '{}', Position: {}", editMessage.getContentDelta(), editMessage.getCursorPosition());
+        return editMessage;
+    }
 }
