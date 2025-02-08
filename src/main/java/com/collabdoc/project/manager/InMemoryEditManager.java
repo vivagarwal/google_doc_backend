@@ -22,16 +22,6 @@ public class InMemoryEditManager {
 
     public void addOrUpdateEdit(String uniqueLink, EditMessage editMessage) {
         CollabDoc document = inMemoryEdits.get(uniqueLink);
-        if (document == null) {
-            Optional<CollabDoc> docFromDB = collabDocService.getSnippet(uniqueLink);
-            if (docFromDB.isPresent()) {
-                document = docFromDB.get();
-                inMemoryEdits.put(uniqueLink, document);
-            } else {
-                throw new RuntimeException("Document not found for uniqueLink: " + uniqueLink);
-            }
-        }
-
         if (editMessage.getDeleteOperation()) {
             document.handleDelete(editMessage.getCursorPosition());
         } else {
@@ -55,7 +45,7 @@ public class InMemoryEditManager {
         });
 
         // Clear the in-memory edits after persistence
-        inMemoryEdits.clear();
+        //inMemoryEdits.clear();
     }
 
     public boolean persistEditsforOne(String uniqueLink){
@@ -65,5 +55,18 @@ public class InMemoryEditManager {
             return true;
         else   
             return false;
+    }
+
+    public void loadinMemory(String uniqueLink){
+        CollabDoc document = inMemoryEdits.get(uniqueLink);
+        if (document == null) {
+            Optional<CollabDoc> docFromDB = collabDocService.getSnippet(uniqueLink);
+            if (docFromDB.isPresent()) {
+                document = docFromDB.get();
+                inMemoryEdits.put(uniqueLink, document);
+            } else {
+                throw new RuntimeException("Document not found for uniqueLink: " + uniqueLink);
+            }
+        }
     }
 }

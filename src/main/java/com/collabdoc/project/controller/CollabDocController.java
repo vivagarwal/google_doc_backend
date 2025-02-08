@@ -16,6 +16,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
 
 
 @RestController
@@ -60,6 +63,12 @@ public class CollabDocController {
         return ResponseEntity.ok("Snippet updated successfully.");
     } else {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Snippet not found.");
+        }
     }
-}
+
+    @GetMapping("/edit/{uniqueLink}")
+    public void loadMemory(@PathVariable String uniqueLink) {
+        inMemoryEditManager.loadinMemory(uniqueLink);
+    }
+    
 }
