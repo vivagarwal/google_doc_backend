@@ -4,6 +4,7 @@ package com.collabdoc.project.controller;
 import com.collabdoc.project.model.CRDTCharacter;
 import com.collabdoc.project.model.CollabDoc;
 import com.collabdoc.project.service.CollabDocService;
+import com.collabdoc.project.manager.InMemoryEditManager;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,9 +23,11 @@ import java.util.stream.Collectors;
 public class CollabDocController {
 
     private final CollabDocService collabDocService;
+    private final InMemoryEditManager inMemoryEditManager;
 
-    public CollabDocController(CollabDocService collabDocService){
+    public CollabDocController(CollabDocService collabDocService,InMemoryEditManager inMemoryEditManager){
         this.collabDocService=collabDocService;
+        this.inMemoryEditManager=inMemoryEditManager;
     }
 
     // POST: Create a new snippet
@@ -50,14 +53,9 @@ public class CollabDocController {
 
     //PUT : Update a snippet using its unique link
     @PutMapping("/update/{uniqueLink}")
-    public ResponseEntity<String> updateSnippet(@PathVariable String uniqueLink,@RequestBody List<CRDTCharacter> snippetPayload) {
-    System.out.println(
-    snippetPayload.stream()
-                  .map(CRDTCharacter::toString)
-                  .collect(Collectors.joining(", ")));
-
+    public ResponseEntity<String> updateSnippet(@PathVariable String uniqueLink) {
     // System.out.println(snippetPayload.getContent());
-    boolean isUpdated = collabDocService.updateSnippet(uniqueLink, snippetPayload);
+    boolean isUpdated = inMemoryEditManager.persistEditsforOne(uniqueLink);
     if (isUpdated) {
         return ResponseEntity.ok("Snippet updated successfully.");
     } else {

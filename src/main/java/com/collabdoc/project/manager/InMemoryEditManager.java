@@ -57,4 +57,13 @@ public class InMemoryEditManager {
         // Clear the in-memory edits after persistence
         inMemoryEdits.clear();
     }
+
+    public boolean persistEditsforOne(String uniqueLink){
+        CollabDoc document = inMemoryEdits.get(uniqueLink);
+        boolean isUpdated = collabDocService.updateSnippet(uniqueLink, document.getContent());
+        if(isUpdated)
+            return true;
+        else   
+            return false;
+    }
 }
