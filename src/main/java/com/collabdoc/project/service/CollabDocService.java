@@ -1,12 +1,16 @@
 package com.collabdoc.project.service;
 
 import com.collabdoc.project.model.CollabDoc;
+import com.collabdoc.project.model.CRDTCharacter;
 import com.collabdoc.project.repository.CollabDocRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.List;
+import java.util.Map;
 
 @Service
 public class CollabDocService {
@@ -30,29 +34,17 @@ public class CollabDocService {
 
     // Retrieve and check expiration/views
     public Optional<CollabDoc> getSnippet(String uniqueLink) {
-        Optional<CollabDoc> snippet = collabRepository.findByUniqueLink(uniqueLink);
-
-        if (snippet.isPresent()) {
-            collabRepository.save(snippet.get());
-        }
-        return snippet;
+        return collabRepository.findByUniqueLink(uniqueLink);
     }
 
-    public boolean updateSnippet(String uniqueLink, String content) {
-        // System.out.println("Attempting to update snippet with uniqueLink: {}  "  + uniqueLink);
-
-        // Find the snippet by uniqueLink
-        Optional<CollabDoc> optionalSnippet = collabRepository.findByUniqueLink(uniqueLink);
-
+    public boolean updateSnippet(String uniqueLink, List<CRDTCharacter> updatedContent) {
+         Optional<CollabDoc> optionalSnippet = collabRepository.findByUniqueLink(uniqueLink);
         if (optionalSnippet.isPresent()) {
             // System.out.println("Snippet found with uniqueLink: {}" + uniqueLink);
-
             CollabDoc snippet = optionalSnippet.get();
             // logger.debug("Current content: {}", snippet.getContent());
-
-            snippet.setContent(content);  // Update the content
+            snippet.setContent(updatedContent);  // Update the content
             collabRepository.save(snippet);  // Save the updated snippet to the database
-
             // logger.debug("Updated snippet saved with new content: {}", content);
             return true;
         } else {
@@ -60,5 +52,4 @@ public class CollabDocService {
             return false;
         }
     }
-
 }

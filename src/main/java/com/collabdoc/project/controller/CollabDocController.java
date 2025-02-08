@@ -1,6 +1,7 @@
 package com.collabdoc.project.controller;
 
 
+import com.collabdoc.project.model.CRDTCharacter;
 import com.collabdoc.project.model.CollabDoc;
 import com.collabdoc.project.service.CollabDocService;
 
@@ -9,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -37,21 +39,19 @@ public class CollabDocController {
         return snippet
                 .map(collabDoc -> {
                     Map<String, String> response = new HashMap<>();
-                    response.put("content", collabDoc.getContent());
+                    response.put("content", collabDoc.getDocument());
+                    System.out.println(response.get("content"));
                     return ResponseEntity.ok(response);
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    //PUT : Update a snippet using its unique link
     @PutMapping("/update/{uniqueLink}")
-    public ResponseEntity<String> updateSnippet(
-        @PathVariable String uniqueLink,
-        @RequestBody CollabDoc snippetPayload) {
-
+    public ResponseEntity<String> updateSnippet(@PathVariable String uniqueLink,@RequestBody List<CRDTCharacter> snippetPayload) {
     // System.out.println(uniqueLink);
     // System.out.println(snippetPayload.getContent());
-    boolean isUpdated = collabDocService.updateSnippet(uniqueLink, snippetPayload.getContent());
-
+    boolean isUpdated = collabDocService.updateSnippet(uniqueLink, snippetPayload);
     if (isUpdated) {
         return ResponseEntity.ok("Snippet updated successfully.");
     } else {
