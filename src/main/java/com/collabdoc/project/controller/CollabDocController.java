@@ -1,23 +1,13 @@
 package com.collabdoc.project.controller;
 
-
-import com.collabdoc.project.model.CRDTCharacter;
 import com.collabdoc.project.model.CollabDoc;
 import com.collabdoc.project.service.CollabDocService;
 import com.collabdoc.project.manager.InMemoryEditManager;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Collectors;
-
-
 
 @RestController
 @RequestMapping("/api/snippets")

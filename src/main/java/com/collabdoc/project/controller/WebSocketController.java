@@ -3,27 +3,16 @@ package com.collabdoc.project.controller;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
-
 import com.collabdoc.project.manager.InMemoryEditManager;
-import com.collabdoc.project.model.CRDTCharacter;
-import com.collabdoc.project.model.CollabDoc;
 import com.collabdoc.project.model.EditMessage;
-import com.collabdoc.project.service.CollabDocService;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.messaging.support.GenericMessage;
-import org.springframework.scheduling.annotation.Scheduled;
-
-import java.util.concurrent.ConcurrentHashMap;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.util.Optional;
-
 
 @Controller
 public class WebSocketController {
@@ -32,7 +21,6 @@ public class WebSocketController {
 
     @Autowired
     private InMemoryEditManager inMemoryEditManager;
-    private EditMessage editMessage;
 
     @EventListener
     public void handleWebSocketDisconnect(SessionDisconnectEvent event) {
@@ -40,7 +28,6 @@ public class WebSocketController {
         logger.info("User disconnected. Session ID: {}", sessionId);
         inMemoryEditManager.persistEditsPeriodically();
     }
-
 
     @MessageMapping("/snippets/edit-delta/{uniqueLink}")
     @SendTo("/topic/snippets-delta/{uniqueLink}")
