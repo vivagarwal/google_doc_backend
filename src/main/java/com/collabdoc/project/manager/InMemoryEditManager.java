@@ -48,9 +48,9 @@ public class InMemoryEditManager {
                 }
             }
         });
-
-        // Clear the in-memory edits after persistence
-        //inMemoryEdits.clear();
+        
+        //delete the ones which are no longer being referred to
+        inMemoryEdits.entrySet().removeIf(entry -> entry.getValue().getConnected_clients() == 0);
     }
 
     public boolean persistEditsforOne(String uniqueLink){
@@ -63,21 +63,39 @@ public class InMemoryEditManager {
     }
 
     public void loadinMemory(String uniqueLink){
-        CollabDocState collabDocState = inMemoryEdits.get(uniqueLink);
-        if (collabDocState == null) {
+        inMemoryEdits.computeIfAbsent(uniqueLink, link -> {
             Optional<CollabDoc> docFromDB = collabDocService.getSnippet(uniqueLink);
             if (docFromDB.isPresent()) {
                 CollabDoc document = docFromDB.get();
-                collabDocState=new CollabDocState(document,false);
-                inMemoryEdits.put(uniqueLink, collabDocState);
+                logger.info("Document '{}' loaded into memory.", uniqueLink);
+                return new CollabDocState(document, false, 0);
             } else {
                 throw new RuntimeException("Document not found for uniqueLink: " + uniqueLink);
             }
-        }
+        });
     }
 
     public CollabDoc viewDoc(String uniqueLink){
         CollabDoc document = inMemoryEdits.get(uniqueLink).getCollabDoc();
         return document;  
     }
+
+    public void decrementConnectedClients(String uniqueLink) {
+        CollabDocState collabDocState = inMemoryEdits.get(uniqueLink);
+        if (collabDocState != null) {
+            int updatedCount = collabDocState.getConnected_clients() - 1;
+            collabDocState.setConnected_clients(updatedCount);
+        }
+
+    }
+
+    public void incrementConnectedClients(String uniqueLink) {
+        CollabDocState collabDocState = inMemoryEdits.get(uniqueLink);
+        if (collabDocState != null) {
+            int updatedCount = collabDocState.getConnected_clients()+1;
+            collabDocState.setConnected_clients(updatedCount);
+        }
+    }
+
+
 }
