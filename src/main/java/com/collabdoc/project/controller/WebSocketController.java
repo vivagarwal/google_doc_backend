@@ -127,38 +127,37 @@ public class WebSocketController {
         });
 
         // Validate cursor position to prevent out-of-bounds errors
-        int position = validatePosition(editMessage.getCursorPosition(), document);
+        //int position = validatePosition(editMessage.getCursorPosition(), document);
 
         if (editMessage.getDeleteOperation()) {
-            handleDelete(document, position);
+            handleDelete(document, editMessage.getCursorPosition());
         } else {
-            handleInsert(document, editMessage.getContentDelta(), position, editMessage.getSessionId());
+            handleInsert(document, editMessage.getContentDelta(), editMessage.getCursorPosition(), editMessage.getSessionId());
         }
 
         return editMessage;
-    }
-
-    // Ensure the cursor position is valid within the document size
-    private int validatePosition(int position, CollabDoc document) {
-        int maxPosition = document.getContent().size();
-        return Math.max(0, Math.min(position, maxPosition));
     }
 
     // Handle insertion of a new CRDT character
     private void handleInsert(CollabDoc document, String delta, int position, String sessionId) {
         String uniqueId = System.currentTimeMillis() + "_" + sessionId;  // Generate unique ID
         CRDTCharacter newChar = new CRDTCharacter(delta, uniqueId);
-        document.getContent().add(position, newChar);  // Insert character
+        int adjustedPosition = Math.max(0, Math.min(position, document.getContent().size()));
+        document.getContent().add(adjustedPosition, newChar);  // Insert character
         logger.info("Inserted character '{}' at position {}.", delta, position);
     }
 
     // Handle deletion by marking the character as logically deleted
     private void handleDelete(CollabDoc document, int position) {
-        if (position < document.getContent().size()) {
-            CRDTCharacter charToDelete = document.getContent().get(position);
-            charToDelete.delete();  // Mark character as deleted
-            logger.info("Deleted character '{}' at position {}.", charToDelete.getValue(), position);
-        }
+    // Adjust the position to ensure it's within bounds
+    int adjustedPosition = Math.max(0, Math.min(position, document.getContent().size() - 1));
+    if (document.getContent().size() > 0 && adjustedPosition < document.getContent().size()) {
+        CRDTCharacter charToDelete = document.getContent().get(adjustedPosition);
+        document.getContent().remove(adjustedPosition);  // Remove character from list
+        logger.info("Deleted character '{}' at adjusted position {}.", charToDelete.getValue(), adjustedPosition);
+    } else {
+        logger.warn("Attempted to delete at position {}, but it was out of bounds. Skipping deletion.", position);
+    }
     }
         
 }

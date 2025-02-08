@@ -9,10 +9,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 
 @RestController
@@ -49,7 +51,11 @@ public class CollabDocController {
     //PUT : Update a snippet using its unique link
     @PutMapping("/update/{uniqueLink}")
     public ResponseEntity<String> updateSnippet(@PathVariable String uniqueLink,@RequestBody List<CRDTCharacter> snippetPayload) {
-    // System.out.println(uniqueLink);
+    System.out.println(
+    snippetPayload.stream()
+                  .map(CRDTCharacter::toString)
+                  .collect(Collectors.joining(", ")));
+
     // System.out.println(snippetPayload.getContent());
     boolean isUpdated = collabDocService.updateSnippet(uniqueLink, snippetPayload);
     if (isUpdated) {

@@ -58,9 +58,7 @@ public class CollabDoc {
     public String getDocument(){
         StringBuilder result=new StringBuilder();
         for(CRDTCharacter character : content){
-            if(!character.isDeleted()){
                 result.append(character.getValue());
-            }
         }
         return result.toString();
     }

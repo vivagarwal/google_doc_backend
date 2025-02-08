@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 import java.util.List;
 import java.util.Map;
 
@@ -38,6 +39,11 @@ public class CollabDocService {
     }
 
     public boolean updateSnippet(String uniqueLink, List<CRDTCharacter> updatedContent) {
+        // System.out.println("updated content : " + " " + updatedContent);
+        System.out.println(
+            updatedContent.stream()
+                        .map(CRDTCharacter::toString)
+                        .collect(Collectors.joining(", ")));
          Optional<CollabDoc> optionalSnippet = collabRepository.findByUniqueLink(uniqueLink);
         if (optionalSnippet.isPresent()) {
             // System.out.println("Snippet found with uniqueLink: {}" + uniqueLink);
