@@ -15,13 +15,15 @@ import java.util.concurrent.ConcurrentHashMap;
 public class InMemoryEditManager {
     
     private static final Logger logger = LoggerFactory.getLogger(InMemoryEditManager.class);
-    private final ConcurrentHashMap<String, CollabDoc> inMemoryEdits = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CollabDocState> inMemoryEdits = new ConcurrentHashMap<>();
 
     @Autowired
     private CollabDocService collabDocService;
 
     public void addOrUpdateEdit(String uniqueLink, EditMessage editMessage) {
-        CollabDoc document = inMemoryEdits.get(uniqueLink);
+        CollabDocState collabDocState = inMemoryEdits.get(uniqueLink);
+        collabDocState.setDoc_changed_flag(true);
+        CollabDoc document = collabDocState.getCollabDoc();
         if (editMessage.getDeleteOperation()) {
             document.handleDelete(editMessage.getCursorPosition());
         } else {
@@ -35,12 +37,15 @@ public class InMemoryEditManager {
     @Scheduled(fixedRate = 10*1000)  // Runs every 10 seconds (adjust as needed)
     public void persistEditsPeriodically() {
         logger.info("Persisting in-memory edits to the database.");
-        inMemoryEdits.forEach((uniqueLink, document) -> {
-            boolean isUpdated = collabDocService.updateSnippet(uniqueLink, document.getContent());
-            if (isUpdated) {
-                logger.info("Successfully persisted document '{}'.", uniqueLink);
-            } else {
-                logger.error("Failed to persist document '{}'.", uniqueLink);
+        inMemoryEdits.forEach((uniqueLink, collabDocState) -> {
+            if(collabDocState.isDoc_changed_flag()){
+                boolean isUpdated = collabDocService.updateSnippet(uniqueLink, collabDocState.getCollabDoc().getContent());
+                if (isUpdated) {
+                    logger.info("Successfully persisted document '{}'.", uniqueLink);
+                    collabDocState.setDoc_changed_flag(false);
+                } else {
+                    logger.error("Failed to persist document '{}'.", uniqueLink);
+                }
             }
         });
 
@@ -49,7 +54,7 @@ public class InMemoryEditManager {
     }
 
     public boolean persistEditsforOne(String uniqueLink){
-        CollabDoc document = inMemoryEdits.get(uniqueLink);
+        CollabDoc document = inMemoryEdits.get(uniqueLink).getCollabDoc();
         boolean isUpdated = collabDocService.updateSnippet(uniqueLink, document.getContent());
         if(isUpdated)
             return true;
@@ -58,15 +63,21 @@ public class InMemoryEditManager {
     }
 
     public void loadinMemory(String uniqueLink){
-        CollabDoc document = inMemoryEdits.get(uniqueLink);
-        if (document == null) {
+        CollabDocState collabDocState = inMemoryEdits.get(uniqueLink);
+        if (collabDocState == null) {
             Optional<CollabDoc> docFromDB = collabDocService.getSnippet(uniqueLink);
             if (docFromDB.isPresent()) {
-                document = docFromDB.get();
-                inMemoryEdits.put(uniqueLink, document);
+                CollabDoc document = docFromDB.get();
+                collabDocState=new CollabDocState(document,false);
+                inMemoryEdits.put(uniqueLink, collabDocState);
             } else {
                 throw new RuntimeException("Document not found for uniqueLink: " + uniqueLink);
             }
         }
+    }
+
+    public CollabDoc viewDoc(String uniqueLink){
+        CollabDoc document = inMemoryEdits.get(uniqueLink).getCollabDoc();
+        return document;  
     }
 }

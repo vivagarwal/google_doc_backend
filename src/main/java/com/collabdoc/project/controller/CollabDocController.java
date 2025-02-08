@@ -16,8 +16,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 
 
 
@@ -42,16 +40,18 @@ public class CollabDocController {
     // GET: Retrieve a snippet using its unique link
     @GetMapping("/view/{uniqueLink}")
     public ResponseEntity<Map<String, String>> getSnippet(@PathVariable String uniqueLink) {
-        Optional<CollabDoc> snippet = collabDocService.getSnippet(uniqueLink);
+        try{
+            inMemoryEditManager.loadinMemory(uniqueLink);
+            CollabDoc snippet = inMemoryEditManager.viewDoc(uniqueLink);
+            Map<String, String> response = new HashMap<>();
+            response.put("content", snippet.getDocument());
+            System.out.println(response.get("content"));
+            return ResponseEntity.ok(response);
 
-        return snippet
-                .map(collabDoc -> {
-                    Map<String, String> response = new HashMap<>();
-                    response.put("content", collabDoc.getDocument());
-                    System.out.println(response.get("content"));
-                    return ResponseEntity.ok(response);
-                })
-                .orElse(ResponseEntity.notFound().build());
+        }
+        catch (Exception e) {
+            return ResponseEntity.notFound().build();
+        }
     }
 
     //PUT : Update a snippet using its unique link
@@ -65,10 +65,4 @@ public class CollabDocController {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Snippet not found.");
         }
     }
-
-    @GetMapping("/edit/{uniqueLink}")
-    public void loadMemory(@PathVariable String uniqueLink) {
-        inMemoryEditManager.loadinMemory(uniqueLink);
-    }
-    
 }
