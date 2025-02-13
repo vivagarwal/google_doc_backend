@@ -71,3 +71,4 @@ docker-compose.override.yml
 
 # System file backups
 *.old
+tmp.txt

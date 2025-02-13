@@ -4,8 +4,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
-import org.springframework.data.mongodb.repository.config.EnableMongoRepositories;
+// import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+// import org.springframework.data.mongodb.repository.config.EnableMongoRepositories;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import javax.sql.DataSource;
@@ -39,16 +39,4 @@ public class DataSourceConfig {
         dataSource.setDriverClassName(driverClassName);
         return dataSource;
     }
-
-    /** ✅ **Use MongoDB Repository when db.type = mongodb** */
-    @Configuration
-    @EnableMongoRepositories(basePackages = "com.collabdoc.project.repository.mongo")
-    @ConditionalOnProperty(name = "db.type", havingValue = "mongodb")
-    static class MongoConfig {}
-
-    /** ✅ **Use JPA Repository when db.type = sql** */
-    @Configuration
-    @EnableJpaRepositories(basePackages = "com.collabdoc.project.repository.sql")
-    @ConditionalOnProperty(name = "db.type", havingValue = "sql")
-    static class JpaConfig {}
 }
