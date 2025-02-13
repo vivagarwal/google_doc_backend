@@ -1,94 +1,87 @@
 package com.collabdoc.project.model;
 
-import org.springframework.data.mongodb.core.mapping.Document;
-
-import com.collabdoc.project.manager.InMemoryEditManager;
-
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.ArrayList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
-@Document
+@Entity
+@Table(name = "collab_docs") // For SQL Database
+@Document(collection = "collab_docs") // For MongoDB
 public class CollabDoc {
 
-    private static final Logger logger = LoggerFactory.getLogger(InMemoryEditManager.class);
+    private static final Logger logger = LoggerFactory.getLogger(CollabDoc.class);
 
     @Id
+    @jakarta.persistence.Id // JPA ID
+    @GeneratedValue(strategy = GenerationType.UUID) // Auto-generate for SQL
     private String id;
 
+    @Column(unique = true, nullable = false)
     private String uniqueLink;
 
-    private List<CRDTCharacter> content;
+    @ElementCollection // For SQL to store list
+    @CollectionTable(name = "collab_doc_content", joinColumns = @JoinColumn(name = "doc_id")) // SQL mapping for list
+    private List<CRDTCharacter> content = new ArrayList<>();
 
     private LocalDateTime createdAt;
 
-    public CollabDoc(String uniqueLink){
-        this.uniqueLink=uniqueLink;
-        this.content=new ArrayList<>();
+    /** ✅ Default Constructor (For JPA) */
+    public CollabDoc() {
+        this.content = new ArrayList<>();
     }
 
-    public String getId() {
-        return id;
-    }
-
-    public void setId(String id) {
-        this.id = id;
-    }
-
-    public String getUniqueLink() {
-        return uniqueLink;
-    }
-
-    public void setUniqueLink(String uniqueLink) {
+    /** ✅ Constructor for Creating New Doc */
+    public CollabDoc(String uniqueLink) {
         this.uniqueLink = uniqueLink;
+        this.content = new ArrayList<>();
+        this.createdAt = LocalDateTime.now();
     }
 
-    public List<CRDTCharacter> getContent(){
-        return content;
-    }
+    /** ✅ Getter and Setter Methods */
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
 
-    public void setContent(List<CRDTCharacter> content){
-        this.content=content;
-    }
+    public String getUniqueLink() { return uniqueLink; }
+    public void setUniqueLink(String uniqueLink) { this.uniqueLink = uniqueLink; }
 
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
+    public List<CRDTCharacter> getContent() { return content; }
+    public void setContent(List<CRDTCharacter> content) { this.content = content; }
 
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 
-    public String getDocument(){
-        StringBuilder result=new StringBuilder();
-        for(CRDTCharacter character : content){
-                result.append(character.getValue());
+    /** ✅ Get Full Document Text */
+    public String getDocument() {
+        StringBuilder result = new StringBuilder();
+        for (CRDTCharacter character : content) {
+            result.append(character.getValue());
         }
         return result.toString();
     }
 
+    /** ✅ Handle Insert */
     public void handleInsert(String delta, int position, String sessionId) {
         String uniqueId = System.currentTimeMillis() + "_" + sessionId;  // Generate unique ID
         CRDTCharacter newChar = new CRDTCharacter(delta, uniqueId);
-        int adjustedPosition = Math.max(0, Math.min(position, this.getContent().size()));
-        this.getContent().add(adjustedPosition, newChar);  // Insert character
-        logger.info("Inserted character '{}' at position {}.", delta, position);
+        int adjustedPosition = Math.max(0, Math.min(position, this.content.size()));
+        this.content.add(adjustedPosition, newChar);  // Insert character
+        logger.info("Inserted character '{}' at position {}.", delta, adjustedPosition);
     }
 
-    // Handle deletion by marking the character as logically deleted
+    /** ✅ Handle Delete */
     public void handleDelete(int position) {
-    // Adjust the position to ensure it's within bounds
-    int adjustedPosition = Math.max(0, Math.min(position, this.getContent().size() - 1));
-    if (this.getContent().size() > 0 && adjustedPosition < this.getContent().size()) {
-        CRDTCharacter charToDelete = this.getContent().get(adjustedPosition);
-        this.getContent().remove(adjustedPosition);  // Remove character from list
-        logger.info("Deleted character '{}' at adjusted position {}.", charToDelete.getValue(), adjustedPosition);
-    } else {
-        logger.warn("Attempted to delete at position {}, but it was out of bounds. Skipping deletion.", position);
-    }
+        int adjustedPosition = Math.max(0, Math.min(position, this.content.size() - 1));
+        if (!this.content.isEmpty() && adjustedPosition < this.content.size()) {
+            CRDTCharacter charToDelete = this.content.get(adjustedPosition);
+            this.content.remove(adjustedPosition);  // Remove character
+            logger.info("Deleted character '{}' at adjusted position {}.", charToDelete.getValue(), adjustedPosition);
+        } else {
+            logger.warn("Attempted to delete at position {}, but it was out of bounds. Skipping deletion.", position);
+        }
     }
 }

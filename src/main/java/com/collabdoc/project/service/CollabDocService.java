@@ -2,25 +2,35 @@ package com.collabdoc.project.service;
 
 import com.collabdoc.project.model.CollabDoc;
 import com.collabdoc.project.model.CRDTCharacter;
-import com.collabdoc.project.repository.CollabDocRepository;
-import org.springframework.stereotype.Service;
+import com.collabdoc.project.repository.mongo.CollabDocMongoRepository;
+import com.collabdoc.project.repository.sql.CollabDocSqlRepository;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class CollabDocService {
 
-    private final CollabDocRepository collabRepository;
+    @Value("${db.type}")
+    private String dbType;
 
-    public CollabDocService(CollabDocRepository collabRepository){
-        this.collabRepository=collabRepository;
+    @Autowired(required = false)
+    private CollabDocMongoRepository mongoRepository;
+
+    @Autowired(required = false)
+    private CollabDocSqlRepository sqlRepository;
+
+    private boolean isMongoDb() {
+        return "mongodb".equalsIgnoreCase(dbType);
     }
 
-    // Create a new snippet
+    /** ✅ Create a New Snippet */
     public CollabDoc createSnippet(CollabDoc collabDoc) {
         if (collabDoc.getCreatedAt() == null) {
             collabDoc.setCreatedAt(LocalDateTime.now());
@@ -28,32 +38,59 @@ public class CollabDocService {
         if (collabDoc.getUniqueLink() == null || collabDoc.getUniqueLink().isEmpty()) {
             collabDoc.setUniqueLink(UUID.randomUUID().toString());
         }
-        return collabRepository.save(collabDoc);
-    }
-
-    // Retrieve and check expiration/views
-    public Optional<CollabDoc> getSnippet(String uniqueLink) {
-        return collabRepository.findByUniqueLink(uniqueLink);
-    }
-
-    public boolean updateSnippet(String uniqueLink, List<CRDTCharacter> updatedContent) {
-        // System.out.println("updated content : " + " " + updatedContent);
-        System.out.println(
-            updatedContent.stream()
-                        .map(CRDTCharacter::toString)
-                        .collect(Collectors.joining(", ")));
-         Optional<CollabDoc> optionalSnippet = collabRepository.findByUniqueLink(uniqueLink);
-        if (optionalSnippet.isPresent()) {
-            // System.out.println("Snippet found with uniqueLink: {}" + uniqueLink);
-            CollabDoc snippet = optionalSnippet.get();
-            // logger.debug("Current content: {}", snippet.getContent());
-            snippet.setContent(updatedContent);  // Update the content
-            collabRepository.save(snippet);  // Save the updated snippet to the database
-            // logger.debug("Updated snippet saved with new content: {}", content);
-            return true;
+        if (isMongoDb()) {
+            if (mongoRepository != null) {
+                return mongoRepository.save(collabDoc);
+            }
         } else {
-            // System.out.println("Snippet not found with uniqueLink: {}"+ uniqueLink);
-            return false;
+            if (sqlRepository != null) {
+                return sqlRepository.save(collabDoc);
+            }
         }
+        throw new RuntimeException("No active database connection found.");
+    }
+
+    /** ✅ Retrieve Snippet */
+    public Optional<CollabDoc> getSnippet(String uniqueLink) {
+        if (isMongoDb()) {
+            if (mongoRepository != null) {
+                return mongoRepository.findByUniqueLink(uniqueLink);
+            }
+        } else {
+            if (sqlRepository != null) {
+                return sqlRepository.findByUniqueLink(uniqueLink);
+            }
+        }
+        throw new RuntimeException("No active database connection found.");
+    }
+
+    /** ✅ Update Snippet Content */
+    public boolean updateSnippet(String uniqueLink, List<CRDTCharacter> updatedContent) {
+        System.out.println("Updated content: " + updatedContent.stream()
+                .map(CRDTCharacter::toString)
+                .collect(Collectors.joining(", ")));
+
+        if (isMongoDb()) {
+            if (mongoRepository != null) {
+                Optional<CollabDoc> optionalSnippet = mongoRepository.findByUniqueLink(uniqueLink);
+                if (optionalSnippet.isPresent()) {
+                    CollabDoc snippet = optionalSnippet.get();
+                    snippet.setContent(updatedContent);
+                    mongoRepository.save(snippet);
+                    return true;
+                }
+            }
+        } else {
+            if (sqlRepository != null) {
+                Optional<CollabDoc> optionalSnippet = sqlRepository.findByUniqueLink(uniqueLink);
+                if (optionalSnippet.isPresent()) {
+                    CollabDoc snippet = optionalSnippet.get();
+                    snippet.setContent(updatedContent);
+                    sqlRepository.save(snippet);
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }
