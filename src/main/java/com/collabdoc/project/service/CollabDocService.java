@@ -2,58 +2,77 @@ package com.collabdoc.project.service;
 
 import com.collabdoc.project.model.CollabDoc;
 import com.collabdoc.project.model.CRDTCharacter;
+import com.collabdoc.project.repository.CRDTCharacterRepository;
 import com.collabdoc.project.repository.CollabDocRepository;
 import org.springframework.stereotype.Service;
+import jakarta.transaction.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import java.util.List;
 
 @Service
 public class CollabDocService {
 
     private final CollabDocRepository collabRepository;
+    private final CRDTCharacterRepository crdtCharacterRepository;
 
-    public CollabDocService(CollabDocRepository collabRepository){
-        this.collabRepository=collabRepository;
+    public CollabDocService(CollabDocRepository collabRepository,CRDTCharacterRepository crdtCharacterRepository){
+        this.collabRepository = collabRepository;
+        this.crdtCharacterRepository=crdtCharacterRepository;
     }
 
-    // Create a new snippet
+    // ✅ Create a new snippet
+    @Transactional
     public CollabDoc createSnippet(CollabDoc collabDoc) {
-        if (collabDoc.getCreatedAt() == null) {
-            collabDoc.setCreatedAt(LocalDateTime.now());
-        }
-        if (collabDoc.getUniqueLink() == null || collabDoc.getUniqueLink().isEmpty()) {
-            collabDoc.setUniqueLink(UUID.randomUUID().toString());
-        }
-        return collabRepository.save(collabDoc);
+        System.out.println("Inside create snippet in collabdoc service");
+    System.out.println(collabDoc.getContent());
+
+    if (collabDoc.getCreatedAt() == null) {
+        collabDoc.setCreatedAt(LocalDateTime.now());
+    }
+    if (collabDoc.getUniqueLink() == null || collabDoc.getUniqueLink().isEmpty()) {
+        collabDoc.setUniqueLink(UUID.randomUUID().toString());
     }
 
-    // Retrieve and check expiration/views
+    // ✅ Ensure all CRDTCharacters are linked to this CollabDoc
+    for (CRDTCharacter character : collabDoc.getContent()) {
+        character.setCollabDoc(collabDoc);
+    }
+
+    // ✅ Save the collabDoc first to generate an ID
+    collabDoc = collabRepository.save(collabDoc);
+
+    // ✅ Save the CRDTCharacter list after associating with CollabDoc ID
+    crdtCharacterRepository.saveAll(collabDoc.getContent());
+
+    return collabDoc;
+    }
+
+    // ✅ Retrieve snippet by unique link
     public Optional<CollabDoc> getSnippet(String uniqueLink) {
         return collabRepository.findByUniqueLink(uniqueLink);
     }
 
+    // ✅ Update snippet content in PostgreSQL
+    @Transactional
     public boolean updateSnippet(String uniqueLink, List<CRDTCharacter> updatedContent) {
-        // System.out.println("updated content : " + " " + updatedContent);
-        System.out.println(
-            updatedContent.stream()
-                        .map(CRDTCharacter::toString)
-                        .collect(Collectors.joining(", ")));
-         Optional<CollabDoc> optionalSnippet = collabRepository.findByUniqueLink(uniqueLink);
+        Optional<CollabDoc> optionalSnippet = collabRepository.findByUniqueLink(uniqueLink);
+        
         if (optionalSnippet.isPresent()) {
-            // System.out.println("Snippet found with uniqueLink: {}" + uniqueLink);
             CollabDoc snippet = optionalSnippet.get();
-            // logger.debug("Current content: {}", snippet.getContent());
-            snippet.setContent(updatedContent);  // Update the content
-            collabRepository.save(snippet);  // Save the updated snippet to the database
-            // logger.debug("Updated snippet saved with new content: {}", content);
+
+            // ✅ Clear existing content and re-add new content
+            snippet.getContent().clear();
+            for (CRDTCharacter character : updatedContent) {
+                character.setCollabDoc(snippet); // ✅ Ensure foreign key reference
+            }
+            snippet.getContent().addAll(updatedContent);
+
+            collabRepository.save(snippet); // Save updates
             return true;
-        } else {
-            // System.out.println("Snippet not found with uniqueLink: {}"+ uniqueLink);
-            return false;
         }
+        return false;
     }
 }

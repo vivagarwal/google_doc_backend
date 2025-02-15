@@ -9,10 +9,10 @@
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com</groupId>
-	<artifactId>pastebin</artifactId>
+	<artifactId>collabdoc</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name>pastebin</name>
-	<description>Spring Boot Project for Pastebin</description>
+	<name>collabdoc</name>
+	<description>Spring Boot Project for Collabdoc</description>
 	<url/>
 	<licenses>
 		<license/>
@@ -45,8 +45,13 @@
 			<artifactId>spring-boot-starter-web</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-data-mongodb</artifactId>
+    		<groupId>org.springframework.boot</groupId>
+    		<artifactId>spring-boot-starter-data-jpa</artifactId>
+		</dependency>
+		<dependency>
+    		<groupId>org.postgresql</groupId>
+    		<artifactId>postgresql</artifactId>
+    		<scope>runtime</scope>
 		</dependency>
 		<dependency>
 			<groupId>jakarta.persistence</groupId>

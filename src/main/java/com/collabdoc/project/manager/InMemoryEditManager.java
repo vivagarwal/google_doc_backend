@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class InMemoryEditManager {
-    
+
     private static final Logger logger = LoggerFactory.getLogger(InMemoryEditManager.class);
     private final ConcurrentHashMap<String, CollabDocState> inMemoryEdits = new ConcurrentHashMap<>();
 
@@ -22,8 +22,16 @@ public class InMemoryEditManager {
 
     public void addOrUpdateEdit(String uniqueLink, EditMessage editMessage) {
         CollabDocState collabDocState = inMemoryEdits.get(uniqueLink);
+
+        // ✅ Ensure document exists in memory before updating
+        if (collabDocState == null) {
+            logger.error("Document '{}' not found in memory. Cannot update.", uniqueLink);
+            return;
+        }
+
         collabDocState.setDoc_changed_flag(true);
         CollabDoc document = collabDocState.getCollabDoc();
+
         if (editMessage.getDeleteOperation()) {
             document.handleDelete(editMessage.getCursorPosition());
         } else {
@@ -33,12 +41,12 @@ public class InMemoryEditManager {
         logger.info("Updated in-memory document for link '{}'.", uniqueLink);
     }
 
-    // Periodic persistence of in-memory documents to the database
-    @Scheduled(fixedRate = 10*1000)  // Runs every 10 seconds (adjust as needed)
+    // ✅ Periodic persistence of in-memory documents to the database
+    @Scheduled(fixedRate = 10 * 1000)  // Runs every 10 seconds (adjust as needed)
     public void persistEditsPeriodically() {
-        logger.info("Persisting in-memory edits to the database.");
+        //logger.info("Persisting in-memory edits to the database.");
         inMemoryEdits.forEach((uniqueLink, collabDocState) -> {
-            if(collabDocState.isDoc_changed_flag()){
+            if (collabDocState.isDoc_changed_flag()) {
                 boolean isUpdated = collabDocService.updateSnippet(uniqueLink, collabDocState.getCollabDoc().getContent());
                 if (isUpdated) {
                     logger.info("Successfully persisted document '{}'.", uniqueLink);
@@ -48,21 +56,25 @@ public class InMemoryEditManager {
                 }
             }
         });
-        
-        //delete the ones which are no longer being referred to
+
+        // ✅ Remove documents no longer in use
         inMemoryEdits.entrySet().removeIf(entry -> entry.getValue().getConnected_clients() == 0);
     }
 
-    public boolean persistEditsforOne(String uniqueLink){
-        CollabDoc document = inMemoryEdits.get(uniqueLink).getCollabDoc();
-        boolean isUpdated = collabDocService.updateSnippet(uniqueLink, document.getContent());
-        if(isUpdated)
-            return true;
-        else   
+    public boolean persistEditsforOne(String uniqueLink) {
+        CollabDocState collabDocState = inMemoryEdits.get(uniqueLink);
+
+        // ✅ Check if document exists before persisting
+        if (collabDocState == null) {
+            logger.error("Document '{}' not found in memory. Cannot persist.", uniqueLink);
             return false;
+        }
+
+        boolean isUpdated = collabDocService.updateSnippet(uniqueLink, collabDocState.getCollabDoc().getContent());
+        return isUpdated;
     }
 
-    public void loadinMemory(String uniqueLink){
+    public void loadinMemory(String uniqueLink) {
         inMemoryEdits.computeIfAbsent(uniqueLink, link -> {
             Optional<CollabDoc> docFromDB = collabDocService.getSnippet(uniqueLink);
             if (docFromDB.isPresent()) {
@@ -70,32 +82,37 @@ public class InMemoryEditManager {
                 logger.info("Document '{}' loaded into memory.", uniqueLink);
                 return new CollabDocState(document, false, 0);
             } else {
+                logger.error("Document not found for uniqueLink: {}", uniqueLink);
                 throw new RuntimeException("Document not found for uniqueLink: " + uniqueLink);
             }
         });
     }
 
-    public CollabDoc viewDoc(String uniqueLink){
-        CollabDoc document = inMemoryEdits.get(uniqueLink).getCollabDoc();
-        return document;  
+    public CollabDoc viewDoc(String uniqueLink) {
+        CollabDocState collabDocState = inMemoryEdits.get(uniqueLink);
+
+        // ✅ Check if document exists in memory
+        if (collabDocState == null) {
+            logger.error("Document '{}' not found in memory. Returning null.", uniqueLink);
+            return null;
+        }
+
+        return collabDocState.getCollabDoc();
     }
 
     public void decrementConnectedClients(String uniqueLink) {
         CollabDocState collabDocState = inMemoryEdits.get(uniqueLink);
         if (collabDocState != null) {
             int updatedCount = collabDocState.getConnected_clients() - 1;
-            collabDocState.setConnected_clients(updatedCount);
+            collabDocState.setConnected_clients(Math.max(updatedCount, 0)); // Ensure non-negative count
         }
-
     }
 
     public void incrementConnectedClients(String uniqueLink) {
         CollabDocState collabDocState = inMemoryEdits.get(uniqueLink);
         if (collabDocState != null) {
-            int updatedCount = collabDocState.getConnected_clients()+1;
+            int updatedCount = collabDocState.getConnected_clients() + 1;
             collabDocState.setConnected_clients(updatedCount);
         }
     }
-
-
 }
