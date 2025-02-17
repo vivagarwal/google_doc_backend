@@ -1,6 +1,7 @@
 package com.collabdoc.project.manager;
 
 import com.collabdoc.project.model.EditMessage;
+import com.collabdoc.project.repository.CRDTCharacterRepository;
 import com.collabdoc.project.model.CRDTCharacter;
 import com.collabdoc.project.model.CollabDoc;
 import com.collabdoc.project.service.CollabDocService;
@@ -11,6 +12,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -23,6 +25,9 @@ public class InMemoryEditManager {
 
     @Autowired
     private CollabDocService collabDocService;
+
+    @Autowired
+    private CRDTCharacterRepository crdtCharacterRepository;
 
     public void addOrUpdateEdit(String uniqueLink, EditMessage editMessage) {
         CollabDocState collabDocState = inMemoryEdits.get(uniqueLink);
@@ -51,7 +56,20 @@ public class InMemoryEditManager {
         //logger.info("Persisting in-memory edits to the database.");
         inMemoryEdits.forEach((uniqueLink, collabDocState) -> {
             if (collabDocState.isDoc_changed_flag()) {
-                collabDocService.saveDocument(collabDocState.getCollabDoc());
+
+                CollabDoc document = collabDocState.getCollabDoc();
+
+                // Remove deleted characters from DB
+                List<String> deletedIds = document.getDeletedCharacters().stream()
+                .map(CRDTCharacter::getUniqueId)
+                .collect(Collectors.toList());
+
+                if (!deletedIds.isEmpty()) {
+                    crdtCharacterRepository.deleteAllById(deletedIds);  // Bulk delete in one DB call
+                    document.getDeletedCharacters().clear();  // Clear after deletion
+                }
+
+                collabDocService.saveDocument(document);
                 collabDocState.setDoc_changed_flag(false);
                 logger.info("Successfully persisted document '{}'.", uniqueLink);
             }
@@ -70,7 +88,19 @@ public class InMemoryEditManager {
             return false;
         }
 
-        collabDocService.saveDocument(collabDocState.getCollabDoc());
+        CollabDoc document = collabDocState.getCollabDoc();
+
+        // Remove deleted characters from DB
+        List<String> deletedIds = document.getDeletedCharacters().stream()
+        .map(CRDTCharacter::getUniqueId)
+        .collect(Collectors.toList());
+
+        if (!deletedIds.isEmpty()) {
+            crdtCharacterRepository.deleteAllById(deletedIds);  // Bulk delete in one DB call
+            document.getDeletedCharacters().clear();  // Clear after deletion
+        }
+
+        collabDocService.saveDocument(document);
         return true;
     }
 

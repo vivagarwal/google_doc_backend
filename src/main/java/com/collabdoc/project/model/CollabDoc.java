@@ -31,6 +31,9 @@ public class CollabDoc {
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
+    @Transient  // Not persisted in DB
+    private List<CRDTCharacter> deletedCharacters = new ArrayList<>();  // Holds deleted characters
+
     public CollabDoc(String uniqueLink) {
         this.uniqueLink = uniqueLink;
         this.content = new ArrayList<>();
@@ -99,6 +102,7 @@ public class CollabDoc {
         int adjustedPosition = Math.max(0, Math.min(position, content.size() - 1));
         if (content.size() > 0 && adjustedPosition < content.size()) {
             CRDTCharacter charToDelete = content.get(adjustedPosition);
+            deletedCharacters.add(charToDelete);  // Collect deleted characters
             content.remove(adjustedPosition);
 
             // Shift sequence numbers of all characters after the deleted one
@@ -109,9 +113,13 @@ public class CollabDoc {
                     oldchar.setSequence(oldchar.getSequence()-1);
                 }
             }
-            logger.info("Deleted character '{}' at adjusted position {}.", charToDelete.getValue(), adjustedPosition);
+            logger.info("Marked character '{}' at position {} for deletion.", charToDelete.getValue(), adjustedPosition);
         } else {
             logger.warn("Attempted to delete at position {}, but it was out of bounds. Skipping deletion.", position);
         }
+    }
+
+    public List<CRDTCharacter> getDeletedCharacters() {
+        return deletedCharacters;
     }
 }
