@@ -59,13 +59,14 @@ public class CollabDoc {
         return content;
     }
 
-    public void setContent(List<CRDTCharacter> content) {
-        this.content.clear();
-        for (CRDTCharacter character : content) {
-            character.setCollabDoc(this); // Set Foreign Key
-        }
-        this.content.addAll(content);
-    }
+    // this is not needed now as we are modifying it and never setting it
+    // public void setContent(List<CRDTCharacter> content) {
+    //     this.content.clear();
+    //     for (CRDTCharacter character : content) {
+    //         character.setCollabDoc(this); // Set Foreign Key
+    //     }
+    //     this.content.addAll(content);
+    // }
 
     public LocalDateTime getCreatedAt() {
         return createdAt;
@@ -75,28 +76,39 @@ public class CollabDoc {
         this.createdAt = createdAt;
     }
 
-    public String getDocument() {
-        StringBuilder result = new StringBuilder();
-        for (CRDTCharacter character : content) {
-            result.append(character.getValue());
-        }
-        return result.toString();
-    }
-
     public void handleInsert(String delta, int position, String sessionId) {
         String uniqueId = System.currentTimeMillis() + "_" + sessionId;
-        CRDTCharacter newChar = new CRDTCharacter(delta, uniqueId);
+        int adjustedPosition = Math.max(0, Math.min(position, content.size()));
+
+        // Shift sequence numbers of all characters after this position
+        for(CRDTCharacter oldChar: content)
+        {
+            if(oldChar.getSequence() >= adjustedPosition)
+            {
+                oldChar.setSequence(oldChar.getSequence()+1);
+            }
+        }
+
+        CRDTCharacter newChar = new CRDTCharacter(delta, uniqueId, adjustedPosition);
         newChar.setCollabDoc(this); // Set foreign key reference
-        int adjustedPosition = Math.max(0, Math.min(position, this.getContent().size()));
-        this.getContent().add(adjustedPosition, newChar);
+        content.add(adjustedPosition, newChar);
         logger.info("Inserted character '{}' at position {}.", delta, position);
     }
 
     public void handleDelete(int position) {
-        int adjustedPosition = Math.max(0, Math.min(position, this.getContent().size() - 1));
-        if (this.getContent().size() > 0 && adjustedPosition < this.getContent().size()) {
-            CRDTCharacter charToDelete = this.getContent().get(adjustedPosition);
-            this.getContent().remove(adjustedPosition);
+        int adjustedPosition = Math.max(0, Math.min(position, content.size() - 1));
+        if (content.size() > 0 && adjustedPosition < content.size()) {
+            CRDTCharacter charToDelete = content.get(adjustedPosition);
+            content.remove(adjustedPosition);
+
+            // Shift sequence numbers of all characters after the deleted one
+            for(CRDTCharacter oldchar: content)
+            {
+                if(oldchar.getSequence() > adjustedPosition)
+                {
+                    oldchar.setSequence(oldchar.getSequence()-1);
+                }
+            }
             logger.info("Deleted character '{}' at adjusted position {}.", charToDelete.getValue(), adjustedPosition);
         } else {
             logger.warn("Attempted to delete at position {}, but it was out of bounds. Skipping deletion.", position);

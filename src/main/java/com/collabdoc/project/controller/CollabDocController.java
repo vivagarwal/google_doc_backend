@@ -34,15 +34,14 @@ public class CollabDocController {
         try {
             // Load document into memory
             inMemoryEditManager.loadinMemory(uniqueLink);
-            CollabDoc snippet = inMemoryEditManager.viewDoc(uniqueLink);
+            String sortedDocumentContent = inMemoryEditManager.viewOrderedDoc(uniqueLink);
 
-            if (snippet == null) {
+            if (sortedDocumentContent == null) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Snippet not found"));
             }
-
             // Prepare response
             Map<String, String> response = new HashMap<>();
-            response.put("content", snippet.getDocument());
+            response.put("content", sortedDocumentContent);
 
             return ResponseEntity.ok(response);
 

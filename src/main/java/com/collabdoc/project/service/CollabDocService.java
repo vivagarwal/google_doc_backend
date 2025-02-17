@@ -36,9 +36,11 @@ public class CollabDocService {
         collabDoc.setUniqueLink(UUID.randomUUID().toString());
     }
 
-    // ✅ Ensure all CRDTCharacters are linked to this CollabDoc
-    for (CRDTCharacter character : collabDoc.getContent()) {
+    // ✅ Initialize sequence values and collabdoc for each character
+    for (int i = 0; i < collabDoc.getContent().size(); i++) {
+        CRDTCharacter character = collabDoc.getContent().get(i);
         character.setCollabDoc(collabDoc);
+        character.setSequence(i);
     }
 
     // ✅ Save the collabDoc first to generate an ID

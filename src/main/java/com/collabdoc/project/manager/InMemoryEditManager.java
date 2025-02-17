@@ -1,6 +1,7 @@
 package com.collabdoc.project.manager;
 
 import com.collabdoc.project.model.EditMessage;
+import com.collabdoc.project.model.CRDTCharacter;
 import com.collabdoc.project.model.CollabDoc;
 import com.collabdoc.project.service.CollabDocService;
 import org.slf4j.Logger;
@@ -8,8 +9,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+
+import java.util.Comparator;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Component
 public class InMemoryEditManager {
@@ -84,16 +88,21 @@ public class InMemoryEditManager {
         });
     }
 
-    public CollabDoc viewDoc(String uniqueLink) {
+    public String viewOrderedDoc(String uniqueLink) {
         CollabDocState collabDocState = inMemoryEdits.get(uniqueLink);
 
         // ✅ Check if document exists in memory
         if (collabDocState == null) {
+            // make sure loadinMemory() is called before this function
             logger.error("Document '{}' not found in memory. Returning null.", uniqueLink);
             return null;
         }
 
-        return collabDocState.getCollabDoc();
+        CollabDoc document = collabDocState.getCollabDoc();
+        return document.getContent().stream()
+                                    .sorted(Comparator.comparingInt(CRDTCharacter::getSequence))
+                                    .map(CRDTCharacter::getValue)
+                                    .collect(Collectors.joining(""));
     }
 
     public void decrementConnectedClients(String uniqueLink) {

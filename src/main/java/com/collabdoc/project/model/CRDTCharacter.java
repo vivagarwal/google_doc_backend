@@ -17,14 +17,18 @@ public class CRDTCharacter {
     @Column(nullable = false)
     private String value;
 
+    @Column(nullable = false)
+    private int sequence; // field to store character order in document
+
     @ManyToOne
     @JoinColumn(name = "collab_doc_id", nullable = false) // Foreign key reference
     @JsonBackReference
     private CollabDoc collabDoc;
 
-    public CRDTCharacter(String value, String uniqueId) {
+    public CRDTCharacter(String value, String uniqueId, int sequence) {
         this.value = value;
         this.uniqueId = uniqueId;
+        this.sequence = sequence;
     }
 
     public CRDTCharacter() {}
@@ -51,6 +55,16 @@ public class CRDTCharacter {
 
     public void setCollabDoc(CollabDoc collabDoc) {
         this.collabDoc = collabDoc;
+    }
+
+    public int getSequence()
+    {
+        return sequence;
+    }
+
+    public void setSequence(int sequence)
+    {
+        this.sequence = sequence;
     }
 
     @Override
