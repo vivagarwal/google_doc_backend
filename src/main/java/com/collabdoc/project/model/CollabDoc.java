@@ -24,7 +24,7 @@ public class CollabDoc {
     @Column(unique = true, nullable = false)
     private String uniqueLink;
 
-    @OneToMany(mappedBy = "collabDoc", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "collabDoc", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JsonManagedReference
     private List<CRDTCharacter> content = new ArrayList<>();
 
