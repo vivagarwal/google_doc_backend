@@ -56,23 +56,9 @@ public class CollabDocService {
     }
 
     // ✅ Update snippet content in PostgreSQL
+    // note - transactional is needed here as this will also update the crdt character
     @Transactional
-    public boolean updateSnippet(String uniqueLink, List<CRDTCharacter> updatedContent) {
-        Optional<CollabDoc> optionalSnippet = collabRepository.findByUniqueLink(uniqueLink);
-        
-        if (optionalSnippet.isPresent()) {
-            CollabDoc snippet = optionalSnippet.get();
-
-            // ✅ Clear existing content and re-add new content
-            snippet.getContent().clear();
-            for (CRDTCharacter character : updatedContent) {
-                character.setCollabDoc(snippet); // ✅ Ensure foreign key reference
-            }
-            snippet.getContent().addAll(updatedContent);
-
-            collabRepository.save(snippet); // Save updates
-            return true;
-        }
-        return false;
+    public void saveDocument(CollabDoc collabDoc) {
+        collabRepository.save(collabDoc);
     }
 }

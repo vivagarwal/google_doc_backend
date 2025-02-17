@@ -47,13 +47,9 @@ public class InMemoryEditManager {
         //logger.info("Persisting in-memory edits to the database.");
         inMemoryEdits.forEach((uniqueLink, collabDocState) -> {
             if (collabDocState.isDoc_changed_flag()) {
-                boolean isUpdated = collabDocService.updateSnippet(uniqueLink, collabDocState.getCollabDoc().getContent());
-                if (isUpdated) {
-                    logger.info("Successfully persisted document '{}'.", uniqueLink);
-                    collabDocState.setDoc_changed_flag(false);
-                } else {
-                    logger.error("Failed to persist document '{}'.", uniqueLink);
-                }
+                collabDocService.saveDocument(collabDocState.getCollabDoc());
+                collabDocState.setDoc_changed_flag(false);
+                logger.info("Successfully persisted document '{}'.", uniqueLink);
             }
         });
 
@@ -70,8 +66,8 @@ public class InMemoryEditManager {
             return false;
         }
 
-        boolean isUpdated = collabDocService.updateSnippet(uniqueLink, collabDocState.getCollabDoc().getContent());
-        return isUpdated;
+        collabDocService.saveDocument(collabDocState.getCollabDoc());
+        return true;
     }
 
     public void loadinMemory(String uniqueLink) {
