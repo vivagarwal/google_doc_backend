@@ -66,11 +66,11 @@ public class InMemoryEditManager {
                 .map(CRDTCharacter::getUniqueId)
                 .collect(Collectors.toList());
 
-                if (!deletedIds.isEmpty()) {
+                if (!deletedIds.isEmpty()) { 
                     crdtCharacterRepository.deleteAllById(deletedIds);  // Bulk delete in one DB call
                     document.getDeletedCharacters().clear();  // Clear after deletion
                 }
-                
+
                 collabDocState.setDoc_changed_flag(false);
                 logger.info("Successfully persisted document '{}'.", uniqueLink);
             }
