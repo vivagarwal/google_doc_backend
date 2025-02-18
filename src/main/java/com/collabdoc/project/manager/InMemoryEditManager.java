@@ -62,9 +62,7 @@ public class InMemoryEditManager {
                 collabDocService.saveDocument(document);
 
                 // Remove deleted characters from DB
-                List<String> deletedIds = document.getDeletedCharacters().stream()
-                .map(CRDTCharacter::getUniqueId)
-                .collect(Collectors.toList());
+                List<String> deletedIds = document.getDeletedCharacters();
 
                 if (!deletedIds.isEmpty()) { 
                     crdtCharacterRepository.deleteAllById(deletedIds);  // Bulk delete in one DB call
@@ -92,9 +90,7 @@ public class InMemoryEditManager {
         CollabDoc document = collabDocState.getCollabDoc();
 
         // Remove deleted characters from DB
-        List<String> deletedIds = document.getDeletedCharacters().stream()
-        .map(CRDTCharacter::getUniqueId)
-        .collect(Collectors.toList());
+        List<String> deletedIds = document.getDeletedCharacters();
 
         if (!deletedIds.isEmpty()) {
             crdtCharacterRepository.deleteAllById(deletedIds);  // Bulk delete in one DB call

@@ -32,7 +32,7 @@ public class CollabDoc {
     private LocalDateTime createdAt;
 
     @Transient  // Not persisted in DB
-    private List<CRDTCharacter> deletedCharacters = new ArrayList<>();  // Holds deleted characters
+    private List<String> deletedCharacters = new ArrayList<>();  // Holds deleted characters
 
     public CollabDoc(String uniqueLink) {
         this.uniqueLink = uniqueLink;
@@ -102,7 +102,7 @@ public class CollabDoc {
         int adjustedPosition = Math.max(0, Math.min(position, content.size() - 1));
         if (content.size() > 0 && adjustedPosition < content.size()) {
             CRDTCharacter charToDelete = content.get(adjustedPosition);
-            deletedCharacters.add(charToDelete);  // Collect deleted characters
+            deletedCharacters.add(charToDelete.getUniqueId());  // Collect deleted characters
             content.remove(adjustedPosition);
 
             // Shift sequence numbers of all characters after the deleted one
@@ -119,7 +119,7 @@ public class CollabDoc {
         }
     }
 
-    public List<CRDTCharacter> getDeletedCharacters() {
+    public List<String> getDeletedCharacters() {
         return deletedCharacters;
     }
 }
