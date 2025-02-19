@@ -31,9 +31,6 @@ public class CollabDoc {
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
-    @Transient  // Not persisted in DB
-    private List<String> deletedCharacters = new ArrayList<>();  // Holds deleted characters
-
     public CollabDoc(String uniqueLink) {
         this.uniqueLink = uniqueLink;
         this.content = new ArrayList<>();
@@ -63,13 +60,14 @@ public class CollabDoc {
     }
 
     // this is not needed now as we are modifying it and never setting it
-    // public void setContent(List<CRDTCharacter> content) {
-    //     this.content.clear();
-    //     for (CRDTCharacter character : content) {
-    //         character.setCollabDoc(this); // Set Foreign Key
-    //     }
-    //     this.content.addAll(content);
-    // }
+    public void setContent(List<CRDTCharacter> content) {
+        // this.content.clear();
+        // for (CRDTCharacter character : content) {
+        //     character.setCollabDoc(this); // Set Foreign Key
+        // }
+        // this.content.addAll(content);
+        this.content = content;
+    }
 
     public LocalDateTime getCreatedAt() {
         return createdAt;
@@ -102,8 +100,8 @@ public class CollabDoc {
         int adjustedPosition = Math.max(0, Math.min(position, content.size() - 1));
         if (content.size() > 0 && adjustedPosition < content.size()) {
             CRDTCharacter charToDelete = content.get(adjustedPosition);
-            deletedCharacters.add(charToDelete.getUniqueId());  // Collect deleted characters
             content.remove(adjustedPosition);
+            setContent(new ArrayList<>(getContent()));
 
             // Shift sequence numbers of all characters after the deleted one
             for(CRDTCharacter oldchar: content)
@@ -117,9 +115,5 @@ public class CollabDoc {
         } else {
             logger.warn("Attempted to delete at position {}, but it was out of bounds. Skipping deletion.", position);
         }
-    }
-
-    public List<String> getDeletedCharacters() {
-        return deletedCharacters;
     }
 }

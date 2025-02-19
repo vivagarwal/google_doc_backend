@@ -1,7 +1,6 @@
 package com.collabdoc.project.manager;
 
 import com.collabdoc.project.model.EditMessage;
-import com.collabdoc.project.repository.CRDTCharacterRepository;
 import com.collabdoc.project.model.CRDTCharacter;
 import com.collabdoc.project.model.CollabDoc;
 import com.collabdoc.project.service.CollabDocService;
@@ -12,7 +11,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.Comparator;
-import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -25,9 +23,6 @@ public class InMemoryEditManager {
 
     @Autowired
     private CollabDocService collabDocService;
-
-    @Autowired
-    private CRDTCharacterRepository crdtCharacterRepository;
 
     public void addOrUpdateEdit(String uniqueLink, EditMessage editMessage) {
         CollabDocState collabDocState = inMemoryEdits.get(uniqueLink);

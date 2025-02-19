@@ -17,19 +17,12 @@ import jakarta.transaction.Transactional;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.ArrayList;
-import java.util.List;
 
 @Service
 public class CollabDocService {
 
     private final CollabDocRepository collabRepository;
     private final CRDTCharacterRepository crdtCharacterRepository;
-
-    private static final Logger logger = LoggerFactory.getLogger(InMemoryEditManager.class);
-
-    @PersistenceContext
-    private EntityManager entityManager;
 
     public CollabDocService(CollabDocRepository collabRepository,CRDTCharacterRepository crdtCharacterRepository){
         this.collabRepository = collabRepository;
@@ -75,12 +68,5 @@ public class CollabDocService {
     @Transactional
     public void saveDocumentandDeleteChars(CollabDoc collabDoc) {
         collabRepository.save(collabDoc);  // ✅ Now save without deleted references
-
-        // Remove deleted characters from DB
-        List<String> deletedIds = collabDoc.getDeletedCharacters();
-        if (!deletedIds.isEmpty()) { 
-            // crdtCharacterRepository.deleteAllById(deletedIds);  // Bulk delete in one DB call
-            collabDoc.getDeletedCharacters().clear();  // Clear after deletion
-        }
     }
 }

@@ -1,0 +1,721 @@
+suggestions for debugging :
+
+Got it. Let's **focus only on pinpointing the root cause** and verifying what's happening in the JPA cache/persistence context. I'll break it down into **steps you can take to debug** and truly **verify where the problem lies**.
+
+---
+
+## **🕵️ Debugging Steps to Pinpoint the Issue**
+
+### **1️⃣ Check Hibernate's First-Level Cache (Persistence Context)**
+- The most likely cause is that **Hibernate still has an old reference** to the deleted character in the persistence context.
+- Even though it's removed from the database, Hibernate **may still hold an in-memory reference**.
+
+### **🔍 How to Verify**
+Inside your `persistEditsPeriodically()` function, **before saving**, log the contents of the `CollabDoc` object Hibernate is about to persist:
+
+```java
+logger.info("🟡 BEFORE SAVING DOC - Content Size: {}", document.getContent().size());
+for (CRDTCharacter character : document.getContent()) {
+    logger.info("🟡 Character ID: {} Value: {}", character.getUniqueId(), character.getValue());
+}
+```
+
+Now, **right after saving**, log again:
+```java
+collabDocService.saveDocument(document);
+
+logger.info("🟢 AFTER SAVING DOC - Content Size: {}", document.getContent().size());
+for (CRDTCharacter character : document.getContent()) {
+    logger.info("🟢 Character ID: {} Value: {}", character.getUniqueId(), character.getValue());
+}
+```
+
+👉 **Expected Outcome**
+- If before saving, a deleted character still exists, **Hibernate is holding it in cache.**
+- If it's gone, but Hibernate still throws an error, then Hibernate is trying to re-fetch a deleted object.
+
+---
+
+### **2️⃣ Force Hibernate to Refresh Entity State**
+Try manually clearing the persistence context **before saving**:
+
+```java
+@PersistenceContext
+private EntityManager entityManager;
+
+@Transactional
+public void saveDocument(CollabDoc collabDoc) {
+    entityManager.flush();  // Synchronizes the persistence context with DB
+    entityManager.clear();  // Removes all managed entities
+    collabRepository.save(collabDoc);
+}
+```
+
+👉 **Expected Outcome**
+- If the issue is Hibernate holding stale references, this will force a **fresh load**.
+
+---
+
+### **3️⃣ Check If Hibernate is Fetching Deleted Characters**
+You can turn on **SQL query logging** to see what Hibernate is doing under the hood.
+
+#### **🔧 Enable SQL Query Logs**
+In `application.properties`:
+```properties
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.format_sql=true
+spring.jpa.properties.hibernate.use_sql_comments=true
+logging.level.org.hibernate.SQL=DEBUG
+logging.level.org.hibernate.orm.jdbc.bind=TRACE
+```
+
+👉 **Expected Outcome**
+- Look at what **queries are being run when persisting `CollabDoc`**.
+- If it tries to **`SELECT` a deleted `CRDTCharacter`**, then the issue is Hibernate reloading the deleted entity.
+
+---
+
+### **4️⃣ Check Hibernate’s Entity Lifecycle States**
+Before saving, log the state of the deleted entity:
+
+```java
+CRDTCharacter deletedChar = crdtCharacterRepository.findById(deletedCharacterId).orElse(null);
+if (deletedChar != null) {
+    logger.info("🟠 WARNING: Hibernate still sees deleted entity! ID: {}", deletedChar.getUniqueId());
+}
+```
+
+👉 **Expected Outcome**
+- If the deleted entity is **still found**, then Hibernate is **keeping a reference to it.**
+
+---
+
+### **5️⃣ Explicitly Remove Orphaned Entities**
+Try manually detaching orphaned entities **before saving**:
+
+```java
+for (String deletedId : deletedIds) {
+    CRDTCharacter orphanedChar = entityManager.find(CRDTCharacter.class, deletedId);
+    if (orphanedChar != null) {
+        entityManager.remove(orphanedChar);
+    }
+}
+```
+
+👉 **Expected Outcome**
+- This ensures **JPA doesn’t hold stale references**.
+
+---
+
+## **Summary of What to Look For**
+| **Debug Step** | **What to Check** | **Expected Outcome** |
+|---------------|------------------|----------------------|
+| **Log Before & After Saving** | See if deleted characters are still in `CollabDoc.content`. | If they are, Hibernate is caching them. |
+| **Clear Persistence Context** | See if clearing `entityManager` fixes it. | If it does, Hibernate is holding stale references. |
+| **Enable SQL Logging** | See if Hibernate is still querying deleted objects. | If it is, Hibernate is incorrectly tracking them. |
+| **Check Entity State** | Log if the entity exists in the repository before saving. | If it does, the delete process isn't fully working. |
+| **Manually Detach Entities** | Explicitly remove orphaned objects before saving. | If this helps, then Hibernate was keeping a reference. |
+
+---
+
+### **Final Thought**
+> **Your understanding is correct**—this shouldn't be happening. It’s not just JPA, but **how Hibernate tracks entities in memory**.
+>
+> Follow the debugging steps above, and we’ll pinpoint exactly where Hibernate is failing. **Then we’ll talk about a fix.**
+
+---
+Let me know **what results you get from these logs and tests**, and we’ll go from there! 🚀
+
+
+
+
+
+
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+for (CRDTCharacter character : collabDoc.getContent()) {
+            logger.info("✅ Character ID: {} Value: {} Managed: {}", 
+                character.getUniqueId(), character.getValue(), entityManager.contains(character));
+        }
+
+        this gave false
+
+
+
+step 1 output:
+
+2025-02-19T01:07:22.718+05:30  INFO 53418 --- [googledoc_backend_postgres] [nboundChannel-7] c.c.p.controller.WebSocketController     : [RECEIVED DELTA] Delta: 'e', Position: 1, Session ID: 3525f834-2344-47db-bc27-05a6b96058e4, Delete: true
+2025-02-19T01:07:22.718+05:30  INFO 53418 --- [googledoc_backend_postgres] [nboundChannel-7] c.c.project.manager.InMemoryEditManager  : Marked character 'e' at position 1 for deletion.
+2025-02-19T01:07:22.718+05:30  INFO 53418 --- [googledoc_backend_postgres] [nboundChannel-7] c.c.project.manager.InMemoryEditManager  : Updated in-memory document for link '08785959-7680-4eb3-89bf-7126745dc637'.
+2025-02-19T01:07:22.722+05:30 DEBUG 53418 --- [googledoc_backend_postgres] [nboundChannel-7] o.s.m.s.b.SimpleBrokerMessageHandler     : Processing MESSAGE destination=/topic/snippets-delta/08785959-7680-4eb3-89bf-7126745dc637 session=hnbytwrd payload={"contentDelta":"e","cursorPosition":1,"sessionId":"3525f834-2344-47db-bc27-05a6...(truncated)
+2025-02-19T01:07:22.722+05:30 DEBUG 53418 --- [googledoc_backend_postgres] [nboundChannel-7] o.s.m.s.b.SimpleBrokerMessageHandler     : Broadcasting to 1 sessions.
+2025-02-19T01:07:23.693+05:30  INFO 53418 --- [googledoc_backend_postgres] [MessageBroker-3] c.c.project.manager.InMemoryEditManager  : 🟡 BEFORE SAVING DOC - Content Size: 3
+2025-02-19T01:07:23.694+05:30  INFO 53418 --- [googledoc_backend_postgres] [MessageBroker-3] c.c.project.manager.InMemoryEditManager  : 🟡 Character ID: 1739907429843_0 Value: t
+2025-02-19T01:07:23.694+05:30  INFO 53418 --- [googledoc_backend_postgres] [MessageBroker-3] c.c.project.manager.InMemoryEditManager  : 🟡 Character ID: 1739907429843_2 Value: s
+2025-02-19T01:07:23.695+05:30  INFO 53418 --- [googledoc_backend_postgres] [MessageBroker-3] c.c.project.manager.InMemoryEditManager  : 🟡 Character ID: 1739907429843_3 Value: d
+2025-02-19T01:07:23.737+05:30  INFO 53418 --- [googledoc_backend_postgres] [MessageBroker-3] c.c.project.manager.InMemoryEditManager  : 🟢 AFTER SAVING DOC - Content Size: 3
+2025-02-19T01:07:23.737+05:30  INFO 53418 --- [googledoc_backend_postgres] [MessageBroker-3] c.c.project.manager.InMemoryEditManager  : 🟢 Character ID: 1739907429843_0 Value: t
+2025-02-19T01:07:23.737+05:30  INFO 53418 --- [googledoc_backend_postgres] [MessageBroker-3] c.c.project.manager.InMemoryEditManager  : 🟢 Character ID: 1739907429843_2 Value: s
+2025-02-19T01:07:23.738+05:30  INFO 53418 --- [googledoc_backend_postgres] [MessageBroker-3] c.c.project.manager.InMemoryEditManager  : 🟢 Character ID: 1739907429843_3 Value: d
+2025-02-19T01:07:23.747+05:30  INFO 53418 --- [googledoc_backend_postgres] [MessageBroker-3] c.c.project.manager.InMemoryEditManager  : Successfully persisted document '08785959-7680-4eb3-89bf-7126745dc637'.
+2025-02-19T01:07:32.075+05:30 DEBUG 53418 --- [googledoc_backend_postgres] [boundChannel-10] .WebSocketAnnotationMethodMessageHandler : Searching methods to handle SEND /app/snippets/edit-delta/08785959-7680-4eb3-89bf-7126745dc637 session=hnbytwrd, lookupDestination='/snippets/edit-delta/08785959-7680-4eb3-89bf-7126745dc637'
+2025-02-19T01:07:32.076+05:30 DEBUG 53418 --- [googledoc_backend_postgres] [boundChannel-10] .WebSocketAnnotationMethodMessageHandler : Invoking WebSocketController#broadcastCharacterEdit[2 args]
+2025-02-19T01:07:32.077+05:30  INFO 53418 --- [googledoc_backend_postgres] [boundChannel-10] c.c.p.controller.WebSocketController     : [RECEIVED DELTA] Delta: 'a', Position: 2, Session ID: 3525f834-2344-47db-bc27-05a6b96058e4, Delete: false
+2025-02-19T01:07:32.080+05:30  INFO 53418 --- [googledoc_backend_postgres] [boundChannel-10] c.c.project.manager.InMemoryEditManager  : Inserted character 'a' at position 2.
+2025-02-19T01:07:32.080+05:30  INFO 53418 --- [googledoc_backend_postgres] [boundChannel-10] c.c.project.manager.InMemoryEditManager  : Updated in-memory document for link '08785959-7680-4eb3-89bf-7126745dc637'.
+2025-02-19T01:07:32.081+05:30 DEBUG 53418 --- [googledoc_backend_postgres] [boundChannel-10] o.s.m.s.b.SimpleBrokerMessageHandler     : Processing MESSAGE destination=/topic/snippets-delta/08785959-7680-4eb3-89bf-7126745dc637 session=hnbytwrd payload={"contentDelta":"a","cursorPosition":2,"sessionId":"3525f834-2344-47db-bc27-05a6...(truncated)
+2025-02-19T01:07:32.081+05:30 DEBUG 53418 --- [googledoc_backend_postgres] [boundChannel-10] o.s.m.s.b.SimpleBrokerMessageHandler     : Broadcasting to 1 sessions.
+2025-02-19T01:07:33.680+05:30  INFO 53418 --- [googledoc_backend_postgres] [MessageBroker-6] o.s.w.s.c.WebSocketMessageBrokerStats    : WebSocketSession[2 current WS(2)-HttpStream(0)-HttpPoll(0), 2 total, 0 closed abnormally (0 connect failure, 0 send limit, 0 transport error)], stompSubProtocol[processed CONNECT(1)-CONNECTED(1)-DISCONNECT(0)], stompBrokerRelay[null], inboundChannel[pool size = 12, active threads = 0, queued tasks = 0, completed tasks = 12], outboundChannel[pool size = 3, active threads = 0, queued tasks = 0, completed tasks = 3], sockJsScheduler[pool size = 8, active threads = 1, queued tasks = 4, completed tasks = 11]
+2025-02-19T01:07:33.691+05:30  INFO 53418 --- [googledoc_backend_postgres] [MessageBroker-8] c.c.project.manager.InMemoryEditManager  : 🟡 BEFORE SAVING DOC - Content Size: 4
+2025-02-19T01:07:33.691+05:30  INFO 53418 --- [googledoc_backend_postgres] [MessageBroker-8] c.c.project.manager.InMemoryEditManager  : 🟡 Character ID: 1739907429843_0 Value: t
+2025-02-19T01:07:33.691+05:30  INFO 53418 --- [googledoc_backend_postgres] [MessageBroker-8] c.c.project.manager.InMemoryEditManager  : 🟡 Character ID: 1739907429843_2 Value: s
+2025-02-19T01:07:33.691+05:30  INFO 53418 --- [googledoc_backend_postgres] [MessageBroker-8] c.c.project.manager.InMemoryEditManager  : 🟡 Character ID: 1739907452077_3525f834-2344-47db-bc27-05a6b96058e4 Value: a
+2025-02-19T01:07:33.691+05:30  INFO 53418 --- [googledoc_backend_postgres] [MessageBroker-8] c.c.project.manager.InMemoryEditManager  : 🟡 Character ID: 1739907429843_3 Value: d
+2025-02-19T01:07:33.704+05:30 ERROR 53418 --- [googledoc_backend_postgres] [MessageBroker-8] o.s.s.s.TaskUtils$LoggingErrorHandler    : Unexpected error occurred in scheduled task
+org.springframework.orm.jpa.JpaObjectRetrievalFailureException: Unable to find com.collabdoc.project.model.CRDTCharacter with id 1739907429843_1
+
+here i dont see it referencing deleted character after saving in the collabdoc object.
+
+step 2 result:
+
+i added entityManager.flush();  // Synchronizes the persistence context with DB
+    entityManager.clear();  // Removes all managed entities
+in service as suggested. but still getting the same error.
+
+
+
+
+step 3 log output:
+
+
+2025-02-19T02:24:34.054+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : POST "/api/snippets/create", parameters={}
+2025-02-19T02:24:34.059+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] s.w.s.m.m.a.RequestMappingHandlerMapping : Mapped to com.collabdoc.project.controller.CollabDocController#createSnippet(CollabDoc)
+2025-02-19T02:24:34.119+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] m.m.a.RequestResponseBodyMethodProcessor : Read "application/json;charset=UTF-8" to [com.collabdoc.project.model.CollabDoc@7e69dbbe]
+Inside create snippet in collabdoc service
+[t, e, s, d]
+2025-02-19T02:24:34.141+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] org.hibernate.SQL                        : 
+    /* insert for
+        com.collabdoc.project.model.CollabDoc */insert 
+    into
+        collab_doc (created_at, unique_link) 
+    values
+        (?, ?)
+Hibernate: 
+    /* insert for
+        com.collabdoc.project.model.CollabDoc */insert 
+    into
+        collab_doc (created_at, unique_link) 
+    values
+        (?, ?)
+2025-02-19T02:24:34.142+05:30 TRACE 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] org.hibernate.orm.jdbc.bind              : binding parameter (1:TIMESTAMP) <- [2025-02-19T02:24:34.127838]
+2025-02-19T02:24:34.143+05:30 TRACE 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] org.hibernate.orm.jdbc.bind              : binding parameter (2:VARCHAR) <- [cfadf4b9-abe0-4057-904c-186b1c2b21df]
+2025-02-19T02:24:34.162+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] org.hibernate.SQL                        : 
+    /* insert for
+        com.collabdoc.project.model.CRDTCharacter */insert 
+    into
+        crdt_character (collab_doc_id, sequence, value, unique_id) 
+    values
+        (?, ?, ?, ?)
+Hibernate: 
+    /* insert for
+        com.collabdoc.project.model.CRDTCharacter */insert 
+    into
+        crdt_character (collab_doc_id, sequence, value, unique_id) 
+    values
+        (?, ?, ?, ?)
+2025-02-19T02:24:34.162+05:30 TRACE 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] org.hibernate.orm.jdbc.bind              : binding parameter (1:BIGINT) <- [16]
+2025-02-19T02:24:34.162+05:30 TRACE 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] org.hibernate.orm.jdbc.bind              : binding parameter (2:INTEGER) <- [0]
+2025-02-19T02:24:34.162+05:30 TRACE 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] org.hibernate.orm.jdbc.bind              : binding parameter (3:VARCHAR) <- [t]
+2025-02-19T02:24:34.162+05:30 TRACE 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] org.hibernate.orm.jdbc.bind              : binding parameter (4:VARCHAR) <- [1739912073974_0]
+2025-02-19T02:24:34.164+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] org.hibernate.SQL                        : 
+    /* insert for
+        com.collabdoc.project.model.CRDTCharacter */insert 
+    into
+        crdt_character (collab_doc_id, sequence, value, unique_id) 
+    values
+        (?, ?, ?, ?)
+Hibernate: 
+    /* insert for
+        com.collabdoc.project.model.CRDTCharacter */insert 
+    into
+        crdt_character (collab_doc_id, sequence, value, unique_id) 
+    values
+        (?, ?, ?, ?)
+2025-02-19T02:24:34.164+05:30 TRACE 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] org.hibernate.orm.jdbc.bind              : binding parameter (1:BIGINT) <- [16]
+2025-02-19T02:24:34.165+05:30 TRACE 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] org.hibernate.orm.jdbc.bind              : binding parameter (2:INTEGER) <- [1]
+2025-02-19T02:24:34.165+05:30 TRACE 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] org.hibernate.orm.jdbc.bind              : binding parameter (3:VARCHAR) <- [e]
+2025-02-19T02:24:34.165+05:30 TRACE 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] org.hibernate.orm.jdbc.bind              : binding parameter (4:VARCHAR) <- [1739912073974_1]
+2025-02-19T02:24:34.165+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] org.hibernate.SQL                        : 
+    /* insert for
+        com.collabdoc.project.model.CRDTCharacter */insert 
+    into
+        crdt_character (collab_doc_id, sequence, value, unique_id) 
+    values
+        (?, ?, ?, ?)
+Hibernate: 
+    /* insert for
+        com.collabdoc.project.model.CRDTCharacter */insert 
+    into
+        crdt_character (collab_doc_id, sequence, value, unique_id) 
+    values
+        (?, ?, ?, ?)
+2025-02-19T02:24:34.165+05:30 TRACE 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] org.hibernate.orm.jdbc.bind              : binding parameter (1:BIGINT) <- [16]
+2025-02-19T02:24:34.165+05:30 TRACE 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] org.hibernate.orm.jdbc.bind              : binding parameter (2:INTEGER) <- [2]
+2025-02-19T02:24:34.165+05:30 TRACE 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] org.hibernate.orm.jdbc.bind              : binding parameter (3:VARCHAR) <- [s]
+2025-02-19T02:24:34.165+05:30 TRACE 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] org.hibernate.orm.jdbc.bind              : binding parameter (4:VARCHAR) <- [1739912073974_2]
+2025-02-19T02:24:34.166+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] org.hibernate.SQL                        : 
+    /* insert for
+        com.collabdoc.project.model.CRDTCharacter */insert 
+    into
+        crdt_character (collab_doc_id, sequence, value, unique_id) 
+    values
+        (?, ?, ?, ?)
+Hibernate: 
+    /* insert for
+        com.collabdoc.project.model.CRDTCharacter */insert 
+    into
+        crdt_character (collab_doc_id, sequence, value, unique_id) 
+    values
+        (?, ?, ?, ?)
+2025-02-19T02:24:34.166+05:30 TRACE 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] org.hibernate.orm.jdbc.bind              : binding parameter (1:BIGINT) <- [16]
+2025-02-19T02:24:34.166+05:30 TRACE 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] org.hibernate.orm.jdbc.bind              : binding parameter (2:INTEGER) <- [3]
+2025-02-19T02:24:34.166+05:30 TRACE 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] org.hibernate.orm.jdbc.bind              : binding parameter (3:VARCHAR) <- [d]
+2025-02-19T02:24:34.166+05:30 TRACE 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] org.hibernate.orm.jdbc.bind              : binding parameter (4:VARCHAR) <- [1739912073974_3]
+2025-02-19T02:24:34.179+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] o.s.w.s.m.m.a.HttpEntityMethodProcessor  : Using 'application/json', given [*/*] and supported [application/json, application/*+json]
+2025-02-19T02:24:34.179+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] o.s.w.s.m.m.a.HttpEntityMethodProcessor  : Writing [com.collabdoc.project.model.CollabDoc@7e69dbbe]
+2025-02-19T02:24:34.186+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed 200 OK
+2025-02-19T02:24:38.612+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-3] o.s.web.servlet.DispatcherServlet        : GET "/api/snippets/view/cfadf4b9-abe0-4057-904c-186b1c2b21df", parameters={}
+2025-02-19T02:24:38.613+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-3] s.w.s.m.m.a.RequestMappingHandlerMapping : Mapped to com.collabdoc.project.controller.CollabDocController#getSnippet(String)
+2025-02-19T02:24:38.613+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-4] o.s.web.servlet.DispatcherServlet        : GET "/ws/edit/info?t=1739912078598", parameters={masked}
+2025-02-19T02:24:38.615+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-4] o.s.w.s.s.s.WebSocketHandlerMapping      : Mapped to org.springframework.web.socket.sockjs.support.SockJsHttpRequestHandler@2d97344c
+2025-02-19T02:24:38.615+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-4] o.s.w.s.s.t.h.DefaultSockJsService       : Processing transport request: GET http://localhost:8080/ws/edit/info?t=1739912078598
+2025-02-19T02:24:38.616+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-4] o.s.web.servlet.DispatcherServlet        : Completed 200 OK
+2025-02-19T02:24:38.617+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-5] o.s.web.servlet.DispatcherServlet        : GET "/ws/edit/info?t=1739912078598", parameters={masked}
+2025-02-19T02:24:38.617+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-5] o.s.w.s.s.s.WebSocketHandlerMapping      : Mapped to org.springframework.web.socket.sockjs.support.SockJsHttpRequestHandler@2d97344c
+2025-02-19T02:24:38.618+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-5] o.s.w.s.s.t.h.DefaultSockJsService       : Processing transport request: GET http://localhost:8080/ws/edit/info?t=1739912078598
+2025-02-19T02:24:38.618+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-5] o.s.web.servlet.DispatcherServlet        : Completed 200 OK
+2025-02-19T02:24:38.649+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-6] o.s.web.servlet.DispatcherServlet        : GET "/ws/edit/436/2zw1ador/websocket", parameters={}
+2025-02-19T02:24:38.650+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-6] o.s.w.s.s.s.WebSocketHandlerMapping      : Mapped to org.springframework.web.socket.sockjs.support.SockJsHttpRequestHandler@2d97344c
+2025-02-19T02:24:38.650+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-6] o.s.w.s.s.t.h.DefaultSockJsService       : Processing transport request: GET http://localhost:8080/ws/edit/436/2zw1ador/websocket
+2025-02-19T02:24:38.668+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-6] o.s.web.servlet.DispatcherServlet        : Completed 101 SWITCHING_PROTOCOLS
+2025-02-19T02:24:38.673+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-6] s.w.s.h.LoggingWebSocketHandlerDecorator : New WebSocketServerSockJsSession[id=2zw1ador]
+2025-02-19T02:24:38.681+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-3] org.hibernate.SQL                        : 
+    /* <criteria> */ select
+        cd1_0.id,
+        cd1_0.created_at,
+        cd1_0.unique_link 
+    from
+        collab_doc cd1_0 
+    where
+        cd1_0.unique_link=?
+Hibernate: 
+    /* <criteria> */ select
+        cd1_0.id,
+        cd1_0.created_at,
+        cd1_0.unique_link 
+    from
+        collab_doc cd1_0 
+    where
+        cd1_0.unique_link=?
+2025-02-19T02:24:38.681+05:30 TRACE 54897 --- [googledoc_backend_postgres] [nio-8080-exec-3] org.hibernate.orm.jdbc.bind              : binding parameter (1:VARCHAR) <- [cfadf4b9-abe0-4057-904c-186b1c2b21df]
+2025-02-19T02:24:38.682+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-7] o.s.web.servlet.DispatcherServlet        : GET "/ws/edit/126/xuqemozr/websocket", parameters={}
+2025-02-19T02:24:38.682+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-7] o.s.w.s.s.s.WebSocketHandlerMapping      : Mapped to org.springframework.web.socket.sockjs.support.SockJsHttpRequestHandler@2d97344c
+2025-02-19T02:24:38.682+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-7] o.s.w.s.s.t.h.DefaultSockJsService       : Processing transport request: GET http://localhost:8080/ws/edit/126/xuqemozr/websocket
+2025-02-19T02:24:38.683+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-7] o.s.web.servlet.DispatcherServlet        : Completed 101 SWITCHING_PROTOCOLS
+2025-02-19T02:24:38.683+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-7] s.w.s.h.LoggingWebSocketHandlerDecorator : New WebSocketServerSockJsSession[id=xuqemozr]
+2025-02-19T02:24:38.688+05:30  INFO 54897 --- [googledoc_backend_postgres] [nio-8080-exec-3] c.c.project.manager.InMemoryEditManager  : Document 'cfadf4b9-abe0-4057-904c-186b1c2b21df' loaded into memory.
+2025-02-19T02:24:38.688+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nboundChannel-2] o.s.m.s.b.SimpleBrokerMessageHandler     : Processing CONNECT session=xuqemozr
+2025-02-19T02:24:38.689+05:30  INFO 54897 --- [googledoc_backend_postgres] [nio-8080-exec-8] c.c.p.controller.WebSocketController     : User connected. Session ID: xuqemozr, Document: cfadf4b9-abe0-4057-904c-186b1c2b21df
+2025-02-19T02:24:38.689+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-3] org.hibernate.SQL                        : 
+    select
+        c1_0.collab_doc_id,
+        c1_0.unique_id,
+        c1_0.sequence,
+        c1_0.value 
+    from
+        crdt_character c1_0 
+    where
+        c1_0.collab_doc_id=?
+Hibernate: 
+    select
+        c1_0.collab_doc_id,
+        c1_0.unique_id,
+        c1_0.sequence,
+        c1_0.value 
+    from
+        crdt_character c1_0 
+    where
+        c1_0.collab_doc_id=?
+2025-02-19T02:24:38.689+05:30 TRACE 54897 --- [googledoc_backend_postgres] [nio-8080-exec-3] org.hibernate.orm.jdbc.bind              : binding parameter (1:BIGINT) <- [16]
+2025-02-19T02:24:38.691+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nboundChannel-5] o.s.m.s.b.SimpleBrokerMessageHandler     : Processing SUBSCRIBE /topic/snippets-delta/cfadf4b9-abe0-4057-904c-186b1c2b21df id=sub-0 session=xuqemozr
+2025-02-19T02:24:38.693+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-3] o.s.w.s.m.m.a.HttpEntityMethodProcessor  : Using 'application/json', given [*/*] and supported [application/json, application/*+json]
+2025-02-19T02:24:38.693+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-3] o.s.w.s.m.m.a.HttpEntityMethodProcessor  : Writing [{content=tesd}]
+2025-02-19T02:24:38.694+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nio-8080-exec-3] o.s.web.servlet.DispatcherServlet        : Completed 200 OK
+2025-02-19T02:24:38.695+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [io-8080-exec-10] o.s.web.servlet.DispatcherServlet        : GET "/api/snippets/view/cfadf4b9-abe0-4057-904c-186b1c2b21df", parameters={}
+2025-02-19T02:24:38.695+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [io-8080-exec-10] s.w.s.m.m.a.RequestMappingHandlerMapping : Mapped to com.collabdoc.project.controller.CollabDocController#getSnippet(String)
+2025-02-19T02:24:38.696+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [io-8080-exec-10] o.s.w.s.m.m.a.HttpEntityMethodProcessor  : Using 'application/json', given [*/*] and supported [application/json, application/*+json]
+2025-02-19T02:24:38.696+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [io-8080-exec-10] o.s.w.s.m.m.a.HttpEntityMethodProcessor  : Writing [{content=tesd}]
+2025-02-19T02:24:38.696+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [io-8080-exec-10] o.s.web.servlet.DispatcherServlet        : Completed 200 OK
+2025-02-19T02:24:53.373+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nboundChannel-7] .WebSocketAnnotationMethodMessageHandler : Searching methods to handle SEND /app/snippets/edit-delta/cfadf4b9-abe0-4057-904c-186b1c2b21df session=xuqemozr, lookupDestination='/snippets/edit-delta/cfadf4b9-abe0-4057-904c-186b1c2b21df'
+2025-02-19T02:24:53.390+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nboundChannel-7] .WebSocketAnnotationMethodMessageHandler : Invoking WebSocketController#broadcastCharacterEdit[2 args]
+2025-02-19T02:24:53.402+05:30  INFO 54897 --- [googledoc_backend_postgres] [nboundChannel-7] c.c.p.controller.WebSocketController     : [RECEIVED DELTA] Delta: 'e', Position: 1, Session ID: a5cd47ee-992d-493a-b33c-f90ff3b4078e, Delete: true
+2025-02-19T02:24:53.402+05:30  INFO 54897 --- [googledoc_backend_postgres] [nboundChannel-7] c.c.project.manager.InMemoryEditManager  : Marked character 'e' at position 1 for deletion.
+2025-02-19T02:24:53.402+05:30  INFO 54897 --- [googledoc_backend_postgres] [nboundChannel-7] c.c.project.manager.InMemoryEditManager  : Updated in-memory document for link 'cfadf4b9-abe0-4057-904c-186b1c2b21df'.
+2025-02-19T02:24:53.406+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nboundChannel-7] o.s.m.s.b.SimpleBrokerMessageHandler     : Processing MESSAGE destination=/topic/snippets-delta/cfadf4b9-abe0-4057-904c-186b1c2b21df session=xuqemozr payload={"contentDelta":"e","cursorPosition":1,"sessionId":"a5cd47ee-992d-493a-b33c-f90f...(truncated)
+2025-02-19T02:24:53.407+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [nboundChannel-7] o.s.m.s.b.SimpleBrokerMessageHandler     : Broadcasting to 1 sessions.
+2025-02-19T02:24:55.941+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [MessageBroker-7] org.hibernate.SQL                        : 
+    select
+        cd1_0.id,
+        cd1_0.created_at,
+        cd1_0.unique_link,
+        c1_0.collab_doc_id,
+        c1_0.unique_id,
+        c1_0.sequence,
+        c1_0.value 
+    from
+        collab_doc cd1_0 
+    left join
+        crdt_character c1_0 
+            on cd1_0.id=c1_0.collab_doc_id 
+    where
+        cd1_0.id=?
+Hibernate: 
+    select
+        cd1_0.id,
+        cd1_0.created_at,
+        cd1_0.unique_link,
+        c1_0.collab_doc_id,
+        c1_0.unique_id,
+        c1_0.sequence,
+        c1_0.value 
+    from
+        collab_doc cd1_0 
+    left join
+        crdt_character c1_0 
+            on cd1_0.id=c1_0.collab_doc_id 
+    where
+        cd1_0.id=?
+2025-02-19T02:24:55.942+05:30 TRACE 54897 --- [googledoc_backend_postgres] [MessageBroker-7] org.hibernate.orm.jdbc.bind              : binding parameter (1:BIGINT) <- [16]
+2025-02-19T02:24:55.952+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [MessageBroker-7] org.hibernate.SQL                        : 
+    /* update
+        for com.collabdoc.project.model.CRDTCharacter */update crdt_character 
+    set
+        collab_doc_id=?,
+        sequence=?,
+        value=? 
+    where
+        unique_id=?
+Hibernate: 
+    /* update
+        for com.collabdoc.project.model.CRDTCharacter */update crdt_character 
+    set
+        collab_doc_id=?,
+        sequence=?,
+        value=? 
+    where
+        unique_id=?
+2025-02-19T02:24:55.953+05:30 TRACE 54897 --- [googledoc_backend_postgres] [MessageBroker-7] org.hibernate.orm.jdbc.bind              : binding parameter (1:BIGINT) <- [16]
+2025-02-19T02:24:55.953+05:30 TRACE 54897 --- [googledoc_backend_postgres] [MessageBroker-7] org.hibernate.orm.jdbc.bind              : binding parameter (2:INTEGER) <- [1]
+2025-02-19T02:24:55.953+05:30 TRACE 54897 --- [googledoc_backend_postgres] [MessageBroker-7] org.hibernate.orm.jdbc.bind              : binding parameter (3:VARCHAR) <- [s]
+2025-02-19T02:24:55.953+05:30 TRACE 54897 --- [googledoc_backend_postgres] [MessageBroker-7] org.hibernate.orm.jdbc.bind              : binding parameter (4:VARCHAR) <- [1739912073974_2]
+2025-02-19T02:24:55.955+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [MessageBroker-7] org.hibernate.SQL                        : 
+    /* update
+        for com.collabdoc.project.model.CRDTCharacter */update crdt_character 
+    set
+        collab_doc_id=?,
+        sequence=?,
+        value=? 
+    where
+        unique_id=?
+Hibernate: 
+    /* update
+        for com.collabdoc.project.model.CRDTCharacter */update crdt_character 
+    set
+        collab_doc_id=?,
+        sequence=?,
+        value=? 
+    where
+        unique_id=?
+2025-02-19T02:24:55.955+05:30 TRACE 54897 --- [googledoc_backend_postgres] [MessageBroker-7] org.hibernate.orm.jdbc.bind              : binding parameter (1:BIGINT) <- [16]
+2025-02-19T02:24:55.955+05:30 TRACE 54897 --- [googledoc_backend_postgres] [MessageBroker-7] org.hibernate.orm.jdbc.bind              : binding parameter (2:INTEGER) <- [2]
+2025-02-19T02:24:55.955+05:30 TRACE 54897 --- [googledoc_backend_postgres] [MessageBroker-7] org.hibernate.orm.jdbc.bind              : binding parameter (3:VARCHAR) <- [d]
+2025-02-19T02:24:55.956+05:30 TRACE 54897 --- [googledoc_backend_postgres] [MessageBroker-7] org.hibernate.orm.jdbc.bind              : binding parameter (4:VARCHAR) <- [1739912073974_3]
+2025-02-19T02:24:55.961+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [MessageBroker-7] org.hibernate.SQL                        : 
+    select
+        c1_0.unique_id,
+        c1_0.collab_doc_id,
+        cd1_0.id,
+        cd1_0.created_at,
+        cd1_0.unique_link,
+        c1_0.sequence,
+        c1_0.value 
+    from
+        crdt_character c1_0 
+    join
+        collab_doc cd1_0 
+            on cd1_0.id=c1_0.collab_doc_id 
+    where
+        c1_0.unique_id=?
+Hibernate: 
+    select
+        c1_0.unique_id,
+        c1_0.collab_doc_id,
+        cd1_0.id,
+        cd1_0.created_at,
+        cd1_0.unique_link,
+        c1_0.sequence,
+        c1_0.value 
+    from
+        crdt_character c1_0 
+    join
+        collab_doc cd1_0 
+            on cd1_0.id=c1_0.collab_doc_id 
+    where
+        c1_0.unique_id=?
+2025-02-19T02:24:55.961+05:30 TRACE 54897 --- [googledoc_backend_postgres] [MessageBroker-7] org.hibernate.orm.jdbc.bind              : binding parameter (1:VARCHAR) <- [1739912073974_1]
+2025-02-19T02:24:55.965+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [MessageBroker-7] org.hibernate.SQL                        : 
+    /* delete for com.collabdoc.project.model.CRDTCharacter */delete 
+    from
+        crdt_character 
+    where
+        unique_id=?
+Hibernate: 
+    /* delete for com.collabdoc.project.model.CRDTCharacter */delete 
+    from
+        crdt_character 
+    where
+        unique_id=?
+2025-02-19T02:24:55.965+05:30 TRACE 54897 --- [googledoc_backend_postgres] [MessageBroker-7] org.hibernate.orm.jdbc.bind              : binding parameter (1:VARCHAR) <- [1739912073974_1]
+2025-02-19T02:24:55.966+05:30  INFO 54897 --- [googledoc_backend_postgres] [MessageBroker-7] c.c.project.manager.InMemoryEditManager  : Successfully persisted document 'cfadf4b9-abe0-4057-904c-186b1c2b21df'.
+2025-02-19T02:25:04.856+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [boundChannel-10] .WebSocketAnnotationMethodMessageHandler : Searching methods to handle SEND /app/snippets/edit-delta/cfadf4b9-abe0-4057-904c-186b1c2b21df session=xuqemozr, lookupDestination='/snippets/edit-delta/cfadf4b9-abe0-4057-904c-186b1c2b21df'
+2025-02-19T02:25:04.857+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [boundChannel-10] .WebSocketAnnotationMethodMessageHandler : Invoking WebSocketController#broadcastCharacterEdit[2 args]
+2025-02-19T02:25:04.858+05:30  INFO 54897 --- [googledoc_backend_postgres] [boundChannel-10] c.c.p.controller.WebSocketController     : [RECEIVED DELTA] Delta: 'a', Position: 2, Session ID: a5cd47ee-992d-493a-b33c-f90ff3b4078e, Delete: false
+2025-02-19T02:25:04.861+05:30  INFO 54897 --- [googledoc_backend_postgres] [boundChannel-10] c.c.project.manager.InMemoryEditManager  : Inserted character 'a' at position 2.
+2025-02-19T02:25:04.861+05:30  INFO 54897 --- [googledoc_backend_postgres] [boundChannel-10] c.c.project.manager.InMemoryEditManager  : Updated in-memory document for link 'cfadf4b9-abe0-4057-904c-186b1c2b21df'.
+2025-02-19T02:25:04.862+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [boundChannel-10] o.s.m.s.b.SimpleBrokerMessageHandler     : Processing MESSAGE destination=/topic/snippets-delta/cfadf4b9-abe0-4057-904c-186b1c2b21df session=xuqemozr payload={"contentDelta":"a","cursorPosition":2,"sessionId":"a5cd47ee-992d-493a-b33c-f90f...(truncated)
+2025-02-19T02:25:04.862+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [boundChannel-10] o.s.m.s.b.SimpleBrokerMessageHandler     : Broadcasting to 1 sessions.
+2025-02-19T02:25:05.918+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [MessageBroker-5] org.hibernate.SQL                        : 
+    select
+        cd1_0.id,
+        cd1_0.created_at,
+        cd1_0.unique_link,
+        c1_0.collab_doc_id,
+        c1_0.unique_id,
+        c1_0.sequence,
+        c1_0.value 
+    from
+        collab_doc cd1_0 
+    left join
+        crdt_character c1_0 
+            on cd1_0.id=c1_0.collab_doc_id 
+    where
+        cd1_0.id=?
+Hibernate: 
+    select
+        cd1_0.id,
+        cd1_0.created_at,
+        cd1_0.unique_link,
+        c1_0.collab_doc_id,
+        c1_0.unique_id,
+        c1_0.sequence,
+        c1_0.value 
+    from
+        collab_doc cd1_0 
+    left join
+        crdt_character c1_0 
+            on cd1_0.id=c1_0.collab_doc_id 
+    where
+        cd1_0.id=?
+2025-02-19T02:25:05.918+05:30 TRACE 54897 --- [googledoc_backend_postgres] [MessageBroker-5] org.hibernate.orm.jdbc.bind              : binding parameter (1:BIGINT) <- [16]
+2025-02-19T02:25:05.921+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [MessageBroker-5] org.hibernate.SQL                        : 
+    select
+        c1_0.unique_id,
+        c1_0.collab_doc_id,
+        cd1_0.id,
+        cd1_0.created_at,
+        cd1_0.unique_link,
+        c1_0.sequence,
+        c1_0.value 
+    from
+        crdt_character c1_0 
+    join
+        collab_doc cd1_0 
+            on cd1_0.id=c1_0.collab_doc_id 
+    where
+        c1_0.unique_id=?
+Hibernate: 
+    select
+        c1_0.unique_id,
+        c1_0.collab_doc_id,
+        cd1_0.id,
+        cd1_0.created_at,
+        cd1_0.unique_link,
+        c1_0.sequence,
+        c1_0.value 
+    from
+        crdt_character c1_0 
+    join
+        collab_doc cd1_0 
+            on cd1_0.id=c1_0.collab_doc_id 
+    where
+        c1_0.unique_id=?
+2025-02-19T02:25:05.921+05:30 TRACE 54897 --- [googledoc_backend_postgres] [MessageBroker-5] org.hibernate.orm.jdbc.bind              : binding parameter (1:VARCHAR) <- [1739912104858_a5cd47ee-992d-493a-b33c-f90ff3b4078e]
+2025-02-19T02:25:05.923+05:30 DEBUG 54897 --- [googledoc_backend_postgres] [MessageBroker-5] org.hibernate.SQL                        : 
+    select
+        c1_0.unique_id,
+        c1_0.collab_doc_id,
+        cd1_0.id,
+        cd1_0.created_at,
+        cd1_0.unique_link,
+        c1_0.sequence,
+        c1_0.value 
+    from
+        crdt_character c1_0 
+    join
+        collab_doc cd1_0 
+            on cd1_0.id=c1_0.collab_doc_id 
+    where
+        c1_0.unique_id=?
+Hibernate: 
+    select
+        c1_0.unique_id,
+        c1_0.collab_doc_id,
+        cd1_0.id,
+        cd1_0.created_at,
+        cd1_0.unique_link,
+        c1_0.sequence,
+        c1_0.value 
+    from
+        crdt_character c1_0 
+    join
+        collab_doc cd1_0 
+            on cd1_0.id=c1_0.collab_doc_id 
+    where
+        c1_0.unique_id=?
+2025-02-19T02:25:05.923+05:30 TRACE 54897 --- [googledoc_backend_postgres] [MessageBroker-5] org.hibernate.orm.jdbc.bind              : binding parameter (1:VARCHAR) <- [1739912073974_1]
+2025-02-19T02:25:05.929+05:30 ERROR 54897 --- [googledoc_backend_postgres] [MessageBroker-5] o.s.s.s.TaskUtils$LoggingErrorHandler    : Unexpected error occurred in scheduled task
+
+org.springframework.orm.jpa.JpaObjectRetrievalFailureException: Unable to find com.collabdoc.project.model.CRDTCharacter with id 1739912073974_1
+
+
+
+For step 4 i changed my code to :
+
+// ✅ Periodic persistence of in-memory documents to the database
+    @Scheduled(fixedRate = 10 * 1000)  // Runs every 10 seconds (adjust as needed)
+    public void persistEditsPeriodically() {
+        //logger.info("Persisting in-memory edits to the database.");
+        inMemoryEdits.forEach((uniqueLink, collabDocState) -> {
+            if (collabDocState.isDoc_changed_flag()) {
+
+                CollabDoc document = collabDocState.getCollabDoc();
+
+                CRDTCharacter deletedChar = null;
+                if(deletedCharacterId != null)
+                    deletedChar = crdtCharacterRepository.findById(deletedCharacterId).orElse(null);
+
+                if (deletedChar != null) 
+                {
+                    logger.info("🟠 WARNING: Hibernate still sees deleted entity! ID: {}", deletedChar.getUniqueId());
+                }
+
+                collabDocService.saveDocument(document);
+
+                // Remove deleted characters from DB
+                List<String> deletedIds = document.getDeletedCharacters();
+
+                if (!deletedIds.isEmpty()) { 
+                    deletedCharacterId = deletedIds.get(0);
+                    crdtCharacterRepository.deleteAllById(deletedIds);  // Bulk delete in one DB call
+                    document.getDeletedCharacters().clear();  // Clear after deletion
+                }
+
+                collabDocState.setDoc_changed_flag(false);
+                logger.info("Successfully persisted document '{}'.", uniqueLink);
+            }
+        });
+
+        // ✅ Remove documents no longer in use
+        inMemoryEdits.entrySet().removeIf(entry -> entry.getValue().getConnected_clients() == 0);
+    }
+
+    here deletedCharacterId is a string associated with InMemoryEditManager object. 
+
+    i see no entry of 🟠 WARNING: Hibernate still sees deleted entity! in logs.
+
+
+
+    for step 5 , i still get same error:
+    025-02-19T03:08:23.199+05:30 DEBUG 57311 --- [googledoc_backend_postgres] [nio-8080-exec-8] o.s.web.servlet.DispatcherServlet        : GET "/api/snippets/view/a95cba25-b792-4218-8cc1-81d7da855133", parameters={}
+2025-02-19T03:08:23.199+05:30 DEBUG 57311 --- [googledoc_backend_postgres] [nio-8080-exec-8] s.w.s.m.m.a.RequestMappingHandlerMapping : Mapped to com.collabdoc.project.controller.CollabDocController#getSnippet(String)
+2025-02-19T03:08:23.200+05:30 DEBUG 57311 --- [googledoc_backend_postgres] [nio-8080-exec-8] o.s.w.s.m.m.a.HttpEntityMethodProcessor  : Using 'application/json', given [*/*] and supported [application/json, application/*+json]
+2025-02-19T03:08:23.200+05:30 DEBUG 57311 --- [googledoc_backend_postgres] [nio-8080-exec-8] o.s.w.s.m.m.a.HttpEntityMethodProcessor  : Writing [{content=tesd}]
+2025-02-19T03:08:23.201+05:30 DEBUG 57311 --- [googledoc_backend_postgres] [nio-8080-exec-8] o.s.web.servlet.DispatcherServlet        : Completed 200 OK
+2025-02-19T03:08:31.716+05:30 DEBUG 57311 --- [googledoc_backend_postgres] [nboundChannel-7] .WebSocketAnnotationMethodMessageHandler : Searching methods to handle SEND /app/snippets/edit-delta/a95cba25-b792-4218-8cc1-81d7da855133 session=grbfwtbv, lookupDestination='/snippets/edit-delta/a95cba25-b792-4218-8cc1-81d7da855133'
+2025-02-19T03:08:31.743+05:30 DEBUG 57311 --- [googledoc_backend_postgres] [nboundChannel-7] .WebSocketAnnotationMethodMessageHandler : Invoking WebSocketController#broadcastCharacterEdit[2 args]
+2025-02-19T03:08:31.757+05:30  INFO 57311 --- [googledoc_backend_postgres] [nboundChannel-7] c.c.p.controller.WebSocketController     : [RECEIVED DELTA] Delta: 'e', Position: 1, Session ID: 7f2664fc-7c98-48b5-8d69-02c1fd0150d7, Delete: true
+2025-02-19T03:08:31.758+05:30  INFO 57311 --- [googledoc_backend_postgres] [nboundChannel-7] c.c.project.manager.InMemoryEditManager  : Marked character 'e' at position 1 for deletion.
+2025-02-19T03:08:31.758+05:30  INFO 57311 --- [googledoc_backend_postgres] [nboundChannel-7] c.c.project.manager.InMemoryEditManager  : Updated in-memory document for link 'a95cba25-b792-4218-8cc1-81d7da855133'.
+2025-02-19T03:08:31.761+05:30 DEBUG 57311 --- [googledoc_backend_postgres] [nboundChannel-7] o.s.m.s.b.SimpleBrokerMessageHandler     : Processing MESSAGE destination=/topic/snippets-delta/a95cba25-b792-4218-8cc1-81d7da855133 session=grbfwtbv payload={"contentDelta":"e","cursorPosition":1,"sessionId":"7f2664fc-7c98-48b5-8d69-02c1...(truncated)
+2025-02-19T03:08:31.762+05:30 DEBUG 57311 --- [googledoc_backend_postgres] [nboundChannel-7] o.s.m.s.b.SimpleBrokerMessageHandler     : Broadcasting to 1 sessions.
+2025-02-19T03:08:33.283+05:30 ERROR 57311 --- [googledoc_backend_postgres] [MessageBroker-5] o.s.s.s.TaskUtils$LoggingErrorHandler    : Unexpected error occurred in scheduled task
+
+org.springframework.orm.jpa.JpaObjectRetrievalFailureException: Unable to find com.collabdoc.project.model.CRDTCharacter with id 1739914699559_1
+        at org.springframework.orm.jpa.EntityManagerFactoryUtils.convertJpaAccessExceptionIfPossible(EntityManagerFactoryUtils.java:376) ~[spring-orm-6.2.2.jar:6.2.2]
+
+        in collabRepository.save(collabDoc);
+
+
+
+        here i changed code to following:
+
+        service:
+        // ✅ Update snippet content in PostgreSQL
+    // note - transactional is needed here as this will also update the crdt character
+    @Transactional
+    public void saveDocument(CollabDoc collabDoc) {
+        collabRepository.save(collabDoc);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void deleteCharactersFromDB(List<String> deletedIds) {
+        if (!deletedIds.isEmpty()) {
+            entityManager.flush();  // Ensure pending operations are executed
+            for (String deletedId : deletedIds) {
+                CRDTCharacter orphanedChar = entityManager.find(CRDTCharacter.class, deletedId);
+                if (orphanedChar != null) {
+                    entityManager.remove(orphanedChar);
+                }
+            }
+            entityManager.flush();  // Force deletion
+        }
+    }
+
+    in inmemoryeditmanager:
+    if (collabDocState.isDoc_changed_flag()) {
+
+                CollabDoc document = collabDocState.getCollabDoc();
+
+                // Remove deleted characters from DB
+                List<String> deletedIds = document.getDeletedCharacters();
+                
+                collabDocService.deleteCharactersFromDB(deletedIds); // Now uses a separate Spring-managed transaction
+
+                collabDocService.saveDocument(document);  // Save after deletions
+
+                collabDocState.setDoc_changed_flag(false);
+                logger.info("Successfully persisted document '{}'.", uniqueLink);
+            }
+
+            here infact after first deletion only it is giving error
+            
+
+            so basically none of your debugging steps help confirm and pinpoint the cause of the the error i was originally getting. what the fuck dude
