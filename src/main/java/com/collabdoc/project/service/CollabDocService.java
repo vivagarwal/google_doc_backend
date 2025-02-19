@@ -74,19 +74,12 @@ public class CollabDocService {
     // note - transactional is needed here as this will also update the crdt character
     @Transactional
     public void saveDocumentandDeleteChars(CollabDoc collabDoc) {
-        logger.info("📌 Before Saving: Checking IDs in collabDoc.getContent()");
-    
-        for (CRDTCharacter character : collabDoc.getContent()) {
-            logger.info("✅ Character ID: {} Value: {} Managed: {}", 
-                character.getUniqueId(), character.getValue(), entityManager.contains(character));
-        }
-
         collabRepository.save(collabDoc);  // ✅ Now save without deleted references
 
         // Remove deleted characters from DB
         List<String> deletedIds = collabDoc.getDeletedCharacters();
         if (!deletedIds.isEmpty()) { 
-            crdtCharacterRepository.deleteAllById(deletedIds);  // Bulk delete in one DB call
+            // crdtCharacterRepository.deleteAllById(deletedIds);  // Bulk delete in one DB call
             collabDoc.getDeletedCharacters().clear();  // Clear after deletion
         }
     }
