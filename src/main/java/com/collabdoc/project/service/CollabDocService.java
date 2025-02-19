@@ -1,15 +1,23 @@
 package com.collabdoc.project.service;
 
 import com.collabdoc.project.model.CollabDoc;
+import com.collabdoc.project.manager.InMemoryEditManager;
 import com.collabdoc.project.model.CRDTCharacter;
 import com.collabdoc.project.repository.CRDTCharacterRepository;
 import com.collabdoc.project.repository.CollabDocRepository;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import jakarta.transaction.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -17,6 +25,11 @@ public class CollabDocService {
 
     private final CollabDocRepository collabRepository;
     private final CRDTCharacterRepository crdtCharacterRepository;
+
+    private static final Logger logger = LoggerFactory.getLogger(InMemoryEditManager.class);
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     public CollabDocService(CollabDocRepository collabRepository,CRDTCharacterRepository crdtCharacterRepository){
         this.collabRepository = collabRepository;
@@ -60,7 +73,21 @@ public class CollabDocService {
     // ✅ Update snippet content in PostgreSQL
     // note - transactional is needed here as this will also update the crdt character
     @Transactional
-    public void saveDocument(CollabDoc collabDoc) {
-        collabRepository.save(collabDoc);
+    public void saveDocumentandDeleteChars(CollabDoc collabDoc) {
+        logger.info("📌 Before Saving: Checking IDs in collabDoc.getContent()");
+    
+        for (CRDTCharacter character : collabDoc.getContent()) {
+            logger.info("✅ Character ID: {} Value: {} Managed: {}", 
+                character.getUniqueId(), character.getValue(), entityManager.contains(character));
+        }
+
+        collabRepository.save(collabDoc);  // ✅ Now save without deleted references
+
+        // Remove deleted characters from DB
+        List<String> deletedIds = collabDoc.getDeletedCharacters();
+        if (!deletedIds.isEmpty()) { 
+            crdtCharacterRepository.deleteAllById(deletedIds);  // Bulk delete in one DB call
+            collabDoc.getDeletedCharacters().clear();  // Clear after deletion
+        }
     }
 }

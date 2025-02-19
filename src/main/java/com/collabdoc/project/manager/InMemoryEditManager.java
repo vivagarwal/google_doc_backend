@@ -59,15 +59,7 @@ public class InMemoryEditManager {
 
                 CollabDoc document = collabDocState.getCollabDoc();
 
-                collabDocService.saveDocument(document);
-
-                // Remove deleted characters from DB
-                List<String> deletedIds = document.getDeletedCharacters();
-
-                if (!deletedIds.isEmpty()) { 
-                    crdtCharacterRepository.deleteAllById(deletedIds);  // Bulk delete in one DB call
-                    document.getDeletedCharacters().clear();  // Clear after deletion
-                }
+                collabDocService.saveDocumentandDeleteChars(document);
 
                 collabDocState.setDoc_changed_flag(false);
                 logger.info("Successfully persisted document '{}'.", uniqueLink);
@@ -89,15 +81,7 @@ public class InMemoryEditManager {
 
         CollabDoc document = collabDocState.getCollabDoc();
 
-        // Remove deleted characters from DB
-        List<String> deletedIds = document.getDeletedCharacters();
-
-        if (!deletedIds.isEmpty()) {
-            crdtCharacterRepository.deleteAllById(deletedIds);  // Bulk delete in one DB call
-            document.getDeletedCharacters().clear();  // Clear after deletion
-        }
-
-        collabDocService.saveDocument(document);
+        collabDocService.saveDocumentandDeleteChars(document);
         return true;
     }
 
