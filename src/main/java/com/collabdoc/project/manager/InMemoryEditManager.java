@@ -54,7 +54,7 @@ public class InMemoryEditManager {
 
                 CollabDoc document = collabDocState.getCollabDoc();
 
-                collabDocService.saveDocumentandDeleteChars(document);
+                collabDocService.reloadandSaveDocument(uniqueLink,document);
 
                 collabDocState.setDoc_changed_flag(false);
                 logger.info("Successfully persisted document '{}'.", uniqueLink);
@@ -76,7 +76,7 @@ public class InMemoryEditManager {
 
         CollabDoc document = collabDocState.getCollabDoc();
 
-        collabDocService.saveDocumentandDeleteChars(document);
+        collabDocService.reloadandSaveDocument(uniqueLink,document);
         return true;
     }
 

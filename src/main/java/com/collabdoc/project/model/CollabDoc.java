@@ -59,16 +59,6 @@ public class CollabDoc {
         return content;
     }
 
-    // this is not needed now as we are modifying it and never setting it
-    public void setContent(List<CRDTCharacter> content) {
-        // this.content.clear();
-        // for (CRDTCharacter character : content) {
-        //     character.setCollabDoc(this); // Set Foreign Key
-        // }
-        // this.content.addAll(content);
-        this.content = content;
-    }
-
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
@@ -101,7 +91,6 @@ public class CollabDoc {
         if (content.size() > 0 && adjustedPosition < content.size()) {
             CRDTCharacter charToDelete = content.get(adjustedPosition);
             content.remove(adjustedPosition);
-            setContent(new ArrayList<>(getContent()));
 
             // Shift sequence numbers of all characters after the deleted one
             for(CRDTCharacter oldchar: content)

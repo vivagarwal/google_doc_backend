@@ -1,17 +1,11 @@
 package com.collabdoc.project.service;
 
 import com.collabdoc.project.model.CollabDoc;
-import com.collabdoc.project.manager.InMemoryEditManager;
 import com.collabdoc.project.model.CRDTCharacter;
 import com.collabdoc.project.repository.CRDTCharacterRepository;
 import com.collabdoc.project.repository.CollabDocRepository;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import jakarta.transaction.Transactional;
 
 import java.time.LocalDateTime;
@@ -63,10 +57,17 @@ public class CollabDocService {
         return collabRepository.findByUniqueLink(uniqueLink);
     }
 
-    // ✅ Update snippet content in PostgreSQL
-    // note - transactional is needed here as this will also update the crdt character
-    @Transactional
-    public void saveDocumentandDeleteChars(CollabDoc collabDoc) {
-        collabRepository.save(collabDoc);  // ✅ Now save without deleted references
+   @Transactional
+    public void reloadandSaveDocument(String uniqueLink, CollabDoc detCollabDoc){
+        CollabDoc managedDoc = collabRepository.findByUniqueLink(uniqueLink)
+            .orElseThrow(() -> new RuntimeException("Document not found: " + uniqueLink));
+        
+        managedDoc.getContent().clear();
+        for(CRDTCharacter c : detCollabDoc.getContent()){
+            c.setCollabDoc(managedDoc);
+            managedDoc.getContent().add(c);
+        }
+
+        collabRepository.save(managedDoc);
     }
 }
