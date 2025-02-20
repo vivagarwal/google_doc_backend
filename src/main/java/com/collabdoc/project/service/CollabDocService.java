@@ -34,14 +34,11 @@ public class CollabDocService {
             collabDoc.setUniqueLink(UUID.randomUUID().toString());
         }
 
-        // ✅ Assign Line & Column Numbers Correctly
-        Map<Integer, Integer> columnTracker = new HashMap<>(); // Track column positions per line
-        for (CRDTCharacter character : collabDoc.getContent()) {
+       for (CRDTCharacter character : collabDoc.getContent()) {
             int lineNum = character.getLineNumber();
-            int colNum = columnTracker.getOrDefault(lineNum, 0);
+            int colNum = character.getColumnNumber();
             character.setColumnNumber(colNum);
-            columnTracker.put(lineNum, colNum + 1);
-
+            character.setLineNumber(lineNum);
             character.setCollabDoc(collabDoc); // Set reference
         }
 
