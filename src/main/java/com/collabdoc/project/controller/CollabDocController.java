@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -30,25 +31,23 @@ public class CollabDocController {
 
     // ✅ GET: Retrieve a snippet using its unique link
     @GetMapping("/view/{uniqueLink}")
-    public ResponseEntity<Map<String, String>> getSnippet(@PathVariable String uniqueLink) {
-        try {
-            // Load document into memory
-            inMemoryEditManager.loadinMemory(uniqueLink);
-            String sortedDocumentContent = inMemoryEditManager.viewOrderedDoc(uniqueLink);
+    public ResponseEntity<Map<String, Object>> getSnippet(@PathVariable String uniqueLink) {
+    try {
+        inMemoryEditManager.loadinMemory(uniqueLink);
+        List<String> sortedDocumentContent = inMemoryEditManager.viewOrderedDoc(uniqueLink);
 
-            if (sortedDocumentContent == null) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Snippet not found"));
-            }
-            // Prepare response
-            Map<String, String> response = new HashMap<>();
-            response.put("content", sortedDocumentContent);
-
-            return ResponseEntity.ok(response);
-
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "Error retrieving snippet"));
+        if (sortedDocumentContent == null || sortedDocumentContent.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Snippet not found"));
         }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("content", sortedDocumentContent); // List of lines
+
+        return ResponseEntity.ok(response);
+    } catch (Exception e) {
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "Error retrieving snippet"));
     }
+}
 
     // ✅ PUT: Update a snippet using its unique link
     @PutMapping("/update/{uniqueLink}")

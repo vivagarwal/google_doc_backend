@@ -2,7 +2,8 @@ package com.collabdoc.project.model;
 
 public class EditMessage {
     private String contentDelta;
-    private int cursorPosition;
+    private int lineNumber; // ✅ Line number where the edit happens
+    private int columnNumber; // ✅ Column number where the edit happens
     private String sessionId;
     private boolean deleteOperation;
 
@@ -30,11 +31,19 @@ public class EditMessage {
         this.contentDelta = contentDelta;
     }
 
-    public int getCursorPosition() {
-        return cursorPosition;
+    public int getLineNumber() {
+        return lineNumber;
     }
 
-    public void setCursorPosition(int cursorPosition) {
-        this.cursorPosition = cursorPosition;
+    public void setLineNumber(int lineNumber) {
+        this.lineNumber = lineNumber;
+    }
+
+    public int getColumnNumber() {
+        return columnNumber;
+    }
+
+    public void setColumnNumber(int columnNumber) {
+        this.columnNumber = columnNumber;
     }
 }

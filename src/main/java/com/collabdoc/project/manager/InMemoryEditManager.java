@@ -10,10 +10,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.util.Comparator;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import java.util.*;
 
 @Component
 public class InMemoryEditManager {
@@ -26,24 +25,24 @@ public class InMemoryEditManager {
 
     public void addOrUpdateEdit(String uniqueLink, EditMessage editMessage) {
         CollabDocState collabDocState = inMemoryEdits.get(uniqueLink);
-
-        // ✅ Ensure document exists in memory before updating
+    
         if (collabDocState == null) {
             logger.error("Document '{}' not found in memory. Cannot update.", uniqueLink);
             return;
         }
-
+    
         collabDocState.setDoc_changed_flag(true);
         CollabDoc document = collabDocState.getCollabDoc();
-
+    
+        int lineNumber = editMessage.getLineNumber();
+        int columnNumber = editMessage.getColumnNumber();
         if (editMessage.getDeleteOperation()) {
-            document.handleDelete(editMessage.getCursorPosition());
+            document.handleDelete(lineNumber, columnNumber);
         } else {
-            document.handleInsert(editMessage.getContentDelta(), editMessage.getCursorPosition(), editMessage.getSessionId());
+            document.handleInsert(editMessage.getContentDelta(), lineNumber, columnNumber, editMessage.getSessionId());
         }
-
-        logger.info("Updated in-memory document for link '{}'.", uniqueLink);
     }
+    
 
     // ✅ Periodic persistence of in-memory documents to the database
     @Scheduled(fixedRate = 10 * 1000)  // Runs every 10 seconds (adjust as needed)
@@ -54,7 +53,7 @@ public class InMemoryEditManager {
 
                 CollabDoc document = collabDocState.getCollabDoc();
 
-                collabDocService.reloadandSaveDocument(uniqueLink,document);
+                collabDocService.reloadAndSaveDocument(uniqueLink,document);
 
                 collabDocState.setDoc_changed_flag(false);
                 logger.info("Successfully persisted document '{}'.", uniqueLink);
@@ -76,7 +75,7 @@ public class InMemoryEditManager {
 
         CollabDoc document = collabDocState.getCollabDoc();
 
-        collabDocService.reloadandSaveDocument(uniqueLink,document);
+        collabDocService.reloadAndSaveDocument(uniqueLink,document);
         return true;
     }
 
@@ -94,22 +93,29 @@ public class InMemoryEditManager {
         });
     }
 
-    public String viewOrderedDoc(String uniqueLink) {
+    public List<String> viewOrderedDoc(String uniqueLink) {
         CollabDocState collabDocState = inMemoryEdits.get(uniqueLink);
-
-        // ✅ Check if document exists in memory
+    
         if (collabDocState == null) {
-            // make sure loadinMemory() is called before this function
-            logger.error("Document '{}' not found in memory. Returning null.", uniqueLink);
-            return null;
+            logger.error("Document '{}' not found in memory. Returning an empty list.", uniqueLink);
+            return new ArrayList<>();
         }
-
+    
         CollabDoc document = collabDocState.getCollabDoc();
+    
+        // Group characters by line number and sort them correctly
         return document.getContent().stream()
-                                    .sorted(Comparator.comparingInt(CRDTCharacter::getSequence))
-                                    .map(CRDTCharacter::getValue)
-                                    .collect(Collectors.joining(""));
+            .sorted(Comparator
+                .comparingInt(CRDTCharacter::getLineNumber)
+                .thenComparingInt(CRDTCharacter::getColumnNumber))
+            .collect(Collectors.groupingBy(CRDTCharacter::getLineNumber,
+                Collectors.mapping(CRDTCharacter::getValue, Collectors.joining())))
+            .values()
+            .stream()
+            .collect(Collectors.toList()); // Collect as list of lines
     }
+
+    
 
     public void decrementConnectedClients(String uniqueLink) {
         CollabDocState collabDocState = inMemoryEdits.get(uniqueLink);

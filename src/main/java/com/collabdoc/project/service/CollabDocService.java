@@ -7,10 +7,8 @@ import com.collabdoc.project.repository.CollabDocRepository;
 
 import org.springframework.stereotype.Service;
 import jakarta.transaction.Transactional;
-
 import java.time.LocalDateTime;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 @Service
 public class CollabDocService {
@@ -18,38 +16,42 @@ public class CollabDocService {
     private final CollabDocRepository collabRepository;
     private final CRDTCharacterRepository crdtCharacterRepository;
 
-    public CollabDocService(CollabDocRepository collabRepository,CRDTCharacterRepository crdtCharacterRepository){
+    public CollabDocService(CollabDocRepository collabRepository, CRDTCharacterRepository crdtCharacterRepository) {
         this.collabRepository = collabRepository;
-        this.crdtCharacterRepository=crdtCharacterRepository;
+        this.crdtCharacterRepository = crdtCharacterRepository;
     }
 
     // ✅ Create a new snippet
     @Transactional
     public CollabDoc createSnippet(CollabDoc collabDoc) {
         System.out.println("Inside create snippet in collabdoc service");
-    System.out.println(collabDoc.getContent());
+        System.out.println(collabDoc.getContent());
 
-    if (collabDoc.getCreatedAt() == null) {
-        collabDoc.setCreatedAt(LocalDateTime.now());
-    }
-    if (collabDoc.getUniqueLink() == null || collabDoc.getUniqueLink().isEmpty()) {
-        collabDoc.setUniqueLink(UUID.randomUUID().toString());
-    }
+        if (collabDoc.getCreatedAt() == null) {
+            collabDoc.setCreatedAt(LocalDateTime.now());
+        }
+        if (collabDoc.getUniqueLink() == null || collabDoc.getUniqueLink().isEmpty()) {
+            collabDoc.setUniqueLink(UUID.randomUUID().toString());
+        }
 
-    // ✅ Initialize sequence values and collabdoc for each character
-    for (int i = 0; i < collabDoc.getContent().size(); i++) {
-        CRDTCharacter character = collabDoc.getContent().get(i);
-        character.setCollabDoc(collabDoc);
-        character.setSequence(i);
-    }
+        // ✅ Assign Line & Column Numbers Correctly
+        Map<Integer, Integer> columnTracker = new HashMap<>(); // Track column positions per line
+        for (CRDTCharacter character : collabDoc.getContent()) {
+            int lineNum = character.getLineNumber();
+            int colNum = columnTracker.getOrDefault(lineNum, 0);
+            character.setColumnNumber(colNum);
+            columnTracker.put(lineNum, colNum + 1);
 
-    // ✅ Save the collabDoc first to generate an ID
-    collabDoc = collabRepository.save(collabDoc);
+            character.setCollabDoc(collabDoc); // Set reference
+        }
 
-    // ✅ Save the CRDTCharacter list after associating with CollabDoc ID
-    crdtCharacterRepository.saveAll(collabDoc.getContent());
+        // ✅ Save the collabDoc first to generate an ID
+        collabDoc = collabRepository.save(collabDoc);
 
-    return collabDoc;
+        // ✅ Save the CRDTCharacter list after associating with CollabDoc ID
+        crdtCharacterRepository.saveAll(collabDoc.getContent());
+
+        return collabDoc;
     }
 
     // ✅ Retrieve snippet by unique link
@@ -57,17 +59,33 @@ public class CollabDocService {
         return collabRepository.findByUniqueLink(uniqueLink);
     }
 
-   @Transactional
-    public void reloadandSaveDocument(String uniqueLink, CollabDoc detCollabDoc){
+    // ✅ Reload and Save Document While Preserving Line-Column Order
+    @Transactional
+    public void reloadAndSaveDocument(String uniqueLink, CollabDoc detCollabDoc) {
         CollabDoc managedDoc = collabRepository.findByUniqueLink(uniqueLink)
-            .orElseThrow(() -> new RuntimeException("Document not found: " + uniqueLink));
-        
+                .orElseThrow(() -> new RuntimeException("Document not found: " + uniqueLink));
+    
+        // ✅ Clear previous content and remove deleted characters
         managedDoc.getContent().clear();
-        for(CRDTCharacter c : detCollabDoc.getContent()){
+    
+        Map<Integer, Integer> columnTracker = new HashMap<>();
+        for (CRDTCharacter c : detCollabDoc.getContent()) {
+            int lineNum = c.getLineNumber();
+            int colNum = columnTracker.getOrDefault(lineNum, 0);
+            
+            // Assign column based on insertion order
+            c.setColumnNumber(colNum);
+            columnTracker.put(lineNum, colNum + 1);
+    
             c.setCollabDoc(managedDoc);
             managedDoc.getContent().add(c);
         }
-
+    
+        // ✅ Ensure characters remain sorted properly
+        managedDoc.getContent().sort(Comparator.comparingInt(CRDTCharacter::getLineNumber)
+                                               .thenComparingInt(CRDTCharacter::getColumnNumber));
+    
         collabRepository.save(managedDoc);
     }
+    
 }

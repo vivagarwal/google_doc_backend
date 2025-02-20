@@ -9,66 +9,48 @@ import jakarta.persistence.*;
 public class CRDTCharacter {
 
     @Id
-    // @GeneratedValue(strategy = GenerationType.IDENTITY) // Ensure ID is Long
-    // private Long id;
-    // @Column(nullable = false, unique = true)
     private String uniqueId;  // Unique identifier
 
     @Column(nullable = false)
     private String value;
 
     @Column(nullable = false)
-    private int sequence; // field to store character order in document
+    private int lineNumber;  // 🔥 Stores the line in the document
+
+    @Column(nullable = false)
+    private int columnNumber; // 🔥 Stores the column position
 
     @ManyToOne
-    @JoinColumn(name = "collab_doc_id", nullable = false) // Foreign key reference
+    @JoinColumn(name = "collab_doc_id", nullable = false) 
     @JsonBackReference
     private CollabDoc collabDoc;
 
-    public CRDTCharacter(String value, String uniqueId, int sequence) {
+    public CRDTCharacter(String value, String uniqueId, int lineNumber, int columnNumber) {
         this.value = value;
         this.uniqueId = uniqueId;
-        this.sequence = sequence;
+        this.lineNumber = lineNumber;
+        this.columnNumber = columnNumber;
     }
 
     public CRDTCharacter() {}
 
-    // public Long getId() {
-    //     return id;
-    // }
+    public String getUniqueId() { return uniqueId; }
+    public void setUniqueId(String uniqueId) { this.uniqueId = uniqueId; }
 
-    public String getUniqueId() {
-        return uniqueId;
-    }
+    public String getValue() { return value; }
+    public void setValue(String value) { this.value = value; }
 
-    public void setUniqueId(String uniqueId) {
-        this.uniqueId = uniqueId;
-    }
+    public int getLineNumber() { return lineNumber; }
+    public void setLineNumber(int lineNumber) { this.lineNumber = lineNumber; }
 
-    public String getValue() {
-        return value;
-    }
+    public int getColumnNumber() { return columnNumber; }
+    public void setColumnNumber(int columnNumber) { this.columnNumber = columnNumber; }
 
-    public CollabDoc getCollabDoc() {
-        return collabDoc;
-    }
-
-    public void setCollabDoc(CollabDoc collabDoc) {
-        this.collabDoc = collabDoc;
-    }
-
-    public int getSequence()
-    {
-        return sequence;
-    }
-
-    public void setSequence(int sequence)
-    {
-        this.sequence = sequence;
-    }
+    public CollabDoc getCollabDoc() { return collabDoc; }
+    public void setCollabDoc(CollabDoc collabDoc) { this.collabDoc = collabDoc; }
 
     @Override
     public String toString() {
-        return "" + value;
+        return "[" + lineNumber + "," + columnNumber + "] -> " + value;
     }
 }

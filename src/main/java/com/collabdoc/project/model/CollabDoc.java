@@ -6,7 +6,10 @@ import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.ArrayList;
+import java.util.Comparator;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,10 +18,8 @@ import org.slf4j.LoggerFactory;
 @Table(name = "collab_doc")
 public class CollabDoc {
 
-    private static final Logger logger = LoggerFactory.getLogger(InMemoryEditManager.class);
-
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY) // Auto-increment ID
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(unique = true, nullable = false)
@@ -39,70 +40,62 @@ public class CollabDoc {
 
     public CollabDoc() {}
 
-    public Long getId() {
-        return id;
-    }
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
-    public void setId(Long id) {
-        this.id = id;
-    }
+    public String getUniqueLink() { return uniqueLink; }
+    public void setUniqueLink(String uniqueLink) { this.uniqueLink = uniqueLink; }
 
-    public String getUniqueLink() {
-        return uniqueLink;
-    }
+    public List<CRDTCharacter> getContent() { return content; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 
-    public void setUniqueLink(String uniqueLink) {
-        this.uniqueLink = uniqueLink;
-    }
-
-    public List<CRDTCharacter> getContent() {
-        return content;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public void handleInsert(String delta, int position, String sessionId) {
+    public void handleInsert(String value, int lineNumber, int columnNumber, String sessionId) {
         String uniqueId = System.currentTimeMillis() + "_" + sessionId;
-        int adjustedPosition = Math.max(0, Math.min(position, content.size()));
-
-        // Shift sequence numbers of all characters after this position
-        for(CRDTCharacter oldChar: content)
-        {
-            if(oldChar.getSequence() >= adjustedPosition)
-            {
-                oldChar.setSequence(oldChar.getSequence()+1);
+    
+        // ✅ If inserting a new line, create an empty line first
+    if ("\n".equals(value)) {
+        for (CRDTCharacter character : content) {
+            if (character.getLineNumber() >= lineNumber) {
+                character.setLineNumber(character.getLineNumber() + 1);
             }
         }
-
-        CRDTCharacter newChar = new CRDTCharacter(delta, uniqueId, adjustedPosition);
-        newChar.setCollabDoc(this); // Set foreign key reference
-        content.add(adjustedPosition, newChar);
-        logger.info("Inserted character '{}' at position {}.", delta, position);
+        return;
     }
 
-    public void handleDelete(int position) {
-        int adjustedPosition = Math.max(0, Math.min(position, content.size() - 1));
-        if (content.size() > 0 && adjustedPosition < content.size()) {
-            CRDTCharacter charToDelete = content.get(adjustedPosition);
-            content.remove(adjustedPosition);
-
-            // Shift sequence numbers of all characters after the deleted one
-            for(CRDTCharacter oldchar: content)
-            {
-                if(oldchar.getSequence() > adjustedPosition)
-                {
-                    oldchar.setSequence(oldchar.getSequence()-1);
-                }
-            }
-            logger.info("Marked character '{}' at position {} for deletion.", charToDelete.getValue(), adjustedPosition);
-        } else {
-            logger.warn("Attempted to delete at position {}, but it was out of bounds. Skipping deletion.", position);
+    // ✅ Shift characters in the same line after this column
+    for (CRDTCharacter character : content) {
+        if (character.getLineNumber() == lineNumber && character.getColumnNumber() >= columnNumber) {
+            character.setColumnNumber(character.getColumnNumber() + 1);
         }
+    }
+
+    CRDTCharacter newChar = new CRDTCharacter(value.trim(), uniqueId, lineNumber, columnNumber);
+    newChar.setCollabDoc(this);
+    content.add(newChar);
+    
+        // ✅ Ensure characters remain sorted properly (so database updates correctly)
+        content.sort(Comparator.comparingInt(CRDTCharacter::getLineNumber)
+                               .thenComparingInt(CRDTCharacter::getColumnNumber));
+    }
+    
+
+    public void handleDelete(int lineNumber, int columnNumber) {
+        Optional<CRDTCharacter> charToDelete = content.stream()
+            .filter(c -> c.getLineNumber() == lineNumber && c.getColumnNumber() == columnNumber)
+            .findFirst();
+    
+        charToDelete.ifPresent(character -> {
+            content.remove(character);
+    
+            // Shift remaining characters in the same line to fill the gap
+            content.stream()
+                .filter(c -> c.getLineNumber() == lineNumber && c.getColumnNumber() > columnNumber)
+                .forEach(c -> c.setColumnNumber(c.getColumnNumber() - 1));
+        });
+    
+        // ✅ Ensure characters remain sorted properly
+        content.sort(Comparator.comparingInt(CRDTCharacter::getLineNumber)
+                               .thenComparingInt(CRDTCharacter::getColumnNumber));
     }
 }

@@ -70,10 +70,14 @@ public class WebSocketController {
     @MessageMapping("/snippets/edit-delta/{uniqueLink}")
     @SendTo("/topic/snippets-delta/{uniqueLink}")
     public EditMessage broadcastCharacterEdit(@Payload EditMessage editMessage, @DestinationVariable String uniqueLink) {
-        logger.info("[RECEIVED DELTA] Delta: '{}', Position: {}, Session ID: {}, Delete: {}",
-                editMessage.getContentDelta(), editMessage.getCursorPosition(), editMessage.getSessionId(), editMessage.getDeleteOperation());
-
+        logger.info("[RECEIVED DELTA] Delta: '{}', Line: {}, Column: {}, Session ID: {}, Delete: {}",
+                editMessage.getContentDelta(), editMessage.getLineNumber(), editMessage.getColumnNumber(),
+                editMessage.getSessionId(), editMessage.getDeleteOperation());
+    
+        // ✅ Passes the updated structure with lineNumber & columnNumber instead of cursorPosition
         inMemoryEditManager.addOrUpdateEdit(uniqueLink, editMessage);
+        
         return editMessage;
     }
+    
 }
