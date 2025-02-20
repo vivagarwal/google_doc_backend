@@ -68,14 +68,13 @@ public class CollabDocService {
         // ✅ Clear previous content and remove deleted characters
         managedDoc.getContent().clear();
     
-        Map<Integer, Integer> columnTracker = new HashMap<>();
         for (CRDTCharacter c : detCollabDoc.getContent()) {
             int lineNum = c.getLineNumber();
-            int colNum = columnTracker.getOrDefault(lineNum, 0);
+            int colNum = c.getColumnNumber();
             
             // Assign column based on insertion order
             c.setColumnNumber(colNum);
-            columnTracker.put(lineNum, colNum + 1);
+            c.setLineNumber(lineNum);
     
             c.setCollabDoc(managedDoc);
             managedDoc.getContent().add(c);
