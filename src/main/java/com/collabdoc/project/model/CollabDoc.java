@@ -56,17 +56,21 @@ public class CollabDoc {
         // ✅ If inserting a new line, create an empty line first
     if ("\n".equals(value)) {
         for (CRDTCharacter character : content) {
-            if (character.getLineNumber() >= lineNumber) {
+            if (character.getLineNumber() == lineNumber && character.getColumnNumber()>=columnNumber) {
                 character.setLineNumber(character.getLineNumber() + 1);
+                character.setColumnNumber(character.getColumnNumber()-columnNumber);
+            }else if(character.getLineNumber() > lineNumber){
+                character.setLineNumber(character.getLineNumber()+1);
             }
         }
         return;
     }
-
+    else{
     // ✅ Shift characters in the same line after this column
     for (CRDTCharacter character : content) {
         if (character.getLineNumber() == lineNumber && character.getColumnNumber() >= columnNumber) {
             character.setColumnNumber(character.getColumnNumber() + 1);
+        }
         }
     }
 
@@ -80,19 +84,37 @@ public class CollabDoc {
     }
     
 
-    public void handleDelete(int lineNumber, int columnNumber) {
+    public void handleDelete(int lineNumber, int columnNumber, String value) {
         Optional<CRDTCharacter> charToDelete = content.stream()
             .filter(c -> c.getLineNumber() == lineNumber && c.getColumnNumber() == columnNumber)
             .findFirst();
-    
-        charToDelete.ifPresent(character -> {
-            content.remove(character);
-    
-            // Shift remaining characters in the same line to fill the gap
-            content.stream()
-                .filter(c -> c.getLineNumber() == lineNumber && c.getColumnNumber() > columnNumber)
-                .forEach(c -> c.setColumnNumber(c.getColumnNumber() - 1));
-        });
+            charToDelete.ifPresent(character -> {
+                content.remove(character);
+            });    
+            if ("\n".equals(value)) {
+                int newColumnNumber = content.stream()
+                    .filter(c -> c.getLineNumber() == lineNumber - 1)
+                    .max(Comparator.comparingInt(CRDTCharacter::getColumnNumber))
+                    .map(c -> c.getColumnNumber() + 1) // If c1 is found, set col + 1
+                    .orElse(0);
+                for (CRDTCharacter character : content) {
+                    if (character.getLineNumber() == lineNumber && character.getColumnNumber()>=columnNumber) {
+                        character.setLineNumber(character.getLineNumber() - 1);
+                        character.setColumnNumber(newColumnNumber+columnNumber);
+                    }else if(character.getLineNumber() > lineNumber){
+                        character.setLineNumber(character.getLineNumber()-1);
+                    }
+                }
+                return;
+            }
+            else{
+            // ✅ Shift characters in the same line after this column
+            for (CRDTCharacter character : content) {
+                if (character.getLineNumber() == lineNumber && character.getColumnNumber() >= columnNumber) {
+                    character.setColumnNumber(character.getColumnNumber() - 1);
+                }
+                }
+            }
     
         // ✅ Ensure characters remain sorted properly
         content.sort(Comparator.comparingInt(CRDTCharacter::getLineNumber)

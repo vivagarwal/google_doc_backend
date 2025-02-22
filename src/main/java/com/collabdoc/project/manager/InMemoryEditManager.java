@@ -33,11 +33,10 @@ public class InMemoryEditManager {
     
         collabDocState.setDoc_changed_flag(true);
         CollabDoc document = collabDocState.getCollabDoc();
-    
         int lineNumber = editMessage.getLineNumber();
         int columnNumber = editMessage.getColumnNumber();
         if (editMessage.getDeleteOperation()) {
-            document.handleDelete(lineNumber, columnNumber);
+            document.handleDelete(lineNumber, columnNumber,editMessage.getContentDelta());
         } else {
             document.handleInsert(editMessage.getContentDelta(), lineNumber, columnNumber, editMessage.getSessionId());
         }
