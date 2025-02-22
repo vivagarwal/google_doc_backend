@@ -45,7 +45,7 @@ public class InMemoryEditManager {
     
 
     // ✅ Periodic persistence of in-memory documents to the database
-    //@Scheduled(fixedRate = 10 * 1000)  // Runs every 10 seconds (adjust as needed)
+    @Scheduled(fixedRate = 10 * 1000)  // Runs every 10 seconds (adjust as needed)
     public void persistEditsPeriodically() {
         //logger.info("Persisting in-memory edits to the database.");
         inMemoryEdits.forEach((uniqueLink, collabDocState) -> {
