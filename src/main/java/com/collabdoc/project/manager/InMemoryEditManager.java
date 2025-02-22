@@ -18,7 +18,7 @@ import java.util.*;
 public class InMemoryEditManager {
 
     private static final Logger logger = LoggerFactory.getLogger(InMemoryEditManager.class);
-    private final ConcurrentHashMap<String, CollabDocState> inMemoryEdits = new ConcurrentHashMap<>();
+    public static final ConcurrentHashMap<String, CollabDocState> inMemoryEdits = new ConcurrentHashMap<>();
 
     @Autowired
     private CollabDocService collabDocService;
@@ -92,58 +92,6 @@ public class InMemoryEditManager {
         });
     }
 
-    public List<String> viewOrderedDoc(String uniqueLink) {
-        CollabDocState collabDocState = inMemoryEdits.get(uniqueLink);
-    
-        if (collabDocState == null) {
-            logger.error("Document '{}' not found in memory. Returning an empty list.", uniqueLink);
-            return new ArrayList<>();
-        }
-    
-        CollabDoc document = collabDocState.getCollabDoc();
-    
-        // ✅ Preserve spaces while reconstructing the document
-        Map<Integer, Map<Integer, String>> structuredLines = document.getContent().stream()
-            .sorted(Comparator
-                .comparingInt(CRDTCharacter::getLineNumber)
-                .thenComparingInt(CRDTCharacter::getColumnNumber))
-            .collect(Collectors.groupingBy(
-                CRDTCharacter::getLineNumber,
-                LinkedHashMap::new,
-                Collectors.toMap(
-                    CRDTCharacter::getColumnNumber,
-                    CRDTCharacter::getValue,
-                    (existing, replacement) -> existing, // Merge strategy
-                    LinkedHashMap::new
-                )
-            ));
-    
-        // ✅ Convert to a list of strings ensuring spaces are correctly placed
-        List<String> reconstructedLines = new ArrayList<>();
-        for (Map.Entry<Integer, Map<Integer, String>> entry : structuredLines.entrySet()) {
-            Map<Integer, String> lineMap = entry.getValue();
-    
-            int maxColumn = lineMap.keySet().stream().max(Integer::compareTo).orElse(0);
-            
-            // 🔥 FIX: Initialize `StringBuilder` with mutable spaces
-            StringBuilder lineBuilder = new StringBuilder();
-            for (int i = 0; i <= maxColumn; i++) {
-                lineBuilder.append(" "); // Pre-fill spaces to avoid index errors
-            }
-    
-            // ✅ Insert characters at their correct column positions
-            lineMap.forEach((column, value) -> {
-                if (value != null && !value.isEmpty()) {  // ✅ Check for null or empty value
-                    if (column < lineBuilder.length()) {  // ✅ Avoid out-of-bounds error
-                        lineBuilder.setCharAt(column, value.charAt(0));
-                    }
-                }
-            });
-            reconstructedLines.add(lineBuilder.toString());
-        }
-        return reconstructedLines;
-    }
-    
     public void decrementConnectedClients(String uniqueLink) {
         CollabDocState collabDocState = inMemoryEdits.get(uniqueLink);
         if (collabDocState != null) {

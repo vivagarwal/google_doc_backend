@@ -1,22 +1,23 @@
 package com.collabdoc.project.model;
 
+import com.collabdoc.project.manager.CollabDocState;
 import com.collabdoc.project.manager.InMemoryEditManager;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.util.*;
 
 
 @Entity
 @Table(name = "collab_doc")
 public class CollabDoc {
+
+    private static final Logger logger = LoggerFactory.getLogger(InMemoryEditManager.class);
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -83,7 +84,6 @@ public class CollabDoc {
                                .thenComparingInt(CRDTCharacter::getColumnNumber));
     }
     
-
     public void handleDelete(int lineNumber, int columnNumber, String value) {
         Optional<CRDTCharacter> charToDelete = content.stream()
             .filter(c -> c.getLineNumber() == lineNumber && c.getColumnNumber() == columnNumber)
@@ -98,9 +98,9 @@ public class CollabDoc {
                     .map(c -> c.getColumnNumber() + 1) // If c1 is found, set col + 1
                     .orElse(0);
                 for (CRDTCharacter character : content) {
-                    if (character.getLineNumber() == lineNumber && character.getColumnNumber()>=columnNumber) {
+                    if (character.getLineNumber() == lineNumber) {
                         character.setLineNumber(character.getLineNumber() - 1);
-                        character.setColumnNumber(newColumnNumber+columnNumber);
+                        character.setColumnNumber(newColumnNumber+character.getColumnNumber());
                     }else if(character.getLineNumber() > lineNumber){
                         character.setLineNumber(character.getLineNumber()-1);
                     }
@@ -119,5 +119,68 @@ public class CollabDoc {
         // ✅ Ensure characters remain sorted properly
         content.sort(Comparator.comparingInt(CRDTCharacter::getLineNumber)
                                .thenComparingInt(CRDTCharacter::getColumnNumber));
+    }
+
+    public static List<String> viewOrderedDoc(String uniqueLink) {
+        CollabDocState collabDocState = InMemoryEditManager.inMemoryEdits.get(uniqueLink);
+    
+        if (collabDocState == null) {
+            logger.error("Document '{}' not found in memory. Returning an empty list.", uniqueLink);
+            return new ArrayList<>();
+        }
+    
+        CollabDoc document = collabDocState.getCollabDoc();
+        // ✅ Preserve spaces while reconstructing the document
+       Map<Integer, Map<Integer, String>> structuredLines = document.getContent().stream()
+    .sorted(Comparator
+        .comparingInt(CRDTCharacter::getLineNumber)
+        .thenComparingInt(CRDTCharacter::getColumnNumber))
+    .collect(Collectors.groupingBy(
+        CRDTCharacter::getLineNumber,
+        LinkedHashMap::new,
+        Collectors.toMap(
+            CRDTCharacter::getColumnNumber,
+            CRDTCharacter::getValue,
+            (existing, replacement) -> existing,
+            LinkedHashMap::new
+        )
+    ));
+
+// Determine the min and max line numbers
+int minLine = structuredLines.keySet().stream().min(Integer::compareTo).orElse(0);
+int maxLine = structuredLines.keySet().stream().max(Integer::compareTo).orElse(-1);
+
+List<String> reconstructedLines = new ArrayList<>();
+
+// Loop through every line from minLine to maxLine
+for (int lineNum = minLine; lineNum <= maxLine; lineNum++) {
+
+  Map<Integer, String> lineMap = structuredLines.get(lineNum);
+  if (lineMap == null) {
+    // If no entry for this line, produce an empty line
+    reconstructedLines.add("");
+    continue;
+  }
+
+  // Otherwise build it the same as before
+  int maxColumn = lineMap.keySet().stream().max(Integer::compareTo).orElse(0);
+  StringBuilder lineBuilder = new StringBuilder();
+
+  // Pre-fill with spaces
+  for (int i = 0; i <= maxColumn; i++) {
+    lineBuilder.append(' ');
+  }
+
+  // Place each character
+  lineMap.forEach((column, value) -> {
+    if (value != null && !value.isEmpty() && column < lineBuilder.length()) {
+      lineBuilder.setCharAt(column, value.charAt(0));
+    }
+  });
+
+  reconstructedLines.add(lineBuilder.toString());
+}
+
+return reconstructedLines;
     }
 }
