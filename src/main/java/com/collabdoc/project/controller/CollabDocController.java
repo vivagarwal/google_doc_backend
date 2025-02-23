@@ -34,7 +34,7 @@ public class CollabDocController {
     public ResponseEntity<Map<String, Object>> getSnippet(@PathVariable String uniqueLink) {
     try {
         inMemoryEditManager.loadinMemory(uniqueLink);
-        List<String> sortedDocumentContent = CollabDoc.viewOrderedDoc(uniqueLink);
+        List<String> sortedDocumentContent = inMemoryEditManager.viewOrderedDoc(uniqueLink);
 
         if (sortedDocumentContent == null || sortedDocumentContent.isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Snippet not found"));

@@ -1,24 +1,15 @@
 package com.collabdoc.project.model;
-
-import com.collabdoc.project.manager.CollabDocState;
-import com.collabdoc.project.manager.InMemoryEditManager;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.stream.Collectors;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import java.util.*;
 
 
 @Entity
 @Table(name = "collab_doc")
 public class CollabDoc {
-
-    private static final Logger logger = LoggerFactory.getLogger(InMemoryEditManager.class);
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -121,66 +112,58 @@ public class CollabDoc {
                                .thenComparingInt(CRDTCharacter::getColumnNumber));
     }
 
-    public static List<String> viewOrderedDoc(String uniqueLink) {
-        CollabDocState collabDocState = InMemoryEditManager.inMemoryEdits.get(uniqueLink);
-    
-        if (collabDocState == null) {
-            logger.error("Document '{}' not found in memory. Returning an empty list.", uniqueLink);
-            return new ArrayList<>();
+    public List<String> getOrderedRepresentationOfDoc() {
+        // Preserve spaces while reconstructing the document
+        Map<Integer, Map<Integer, String>> structuredLines = this.getContent().stream()
+        .sorted(Comparator
+            .comparingInt(CRDTCharacter::getLineNumber)
+            .thenComparingInt(CRDTCharacter::getColumnNumber))
+        .collect(Collectors.groupingBy(
+            CRDTCharacter::getLineNumber,
+            LinkedHashMap::new,
+            Collectors.toMap(
+                CRDTCharacter::getColumnNumber,
+                CRDTCharacter::getValue,
+                (existing, replacement) -> existing,
+                LinkedHashMap::new
+            )
+        ));
+
+        // Determine the min and max line numbers
+        int minLine = structuredLines.keySet().stream().min(Integer::compareTo).orElse(0);
+        int maxLine = structuredLines.keySet().stream().max(Integer::compareTo).orElse(-1);
+
+        List<String> reconstructedLines = new ArrayList<>();
+
+        // Loop through every line from minLine to maxLine
+        for (int lineNum = minLine; lineNum <= maxLine; lineNum++) {
+
+        Map<Integer, String> lineMap = structuredLines.get(lineNum);
+        if (lineMap == null) {
+            // If no entry for this line, produce an empty line
+            reconstructedLines.add("");
+            continue;
         }
-    
-        CollabDoc document = collabDocState.getCollabDoc();
-        // ✅ Preserve spaces while reconstructing the document
-       Map<Integer, Map<Integer, String>> structuredLines = document.getContent().stream()
-    .sorted(Comparator
-        .comparingInt(CRDTCharacter::getLineNumber)
-        .thenComparingInt(CRDTCharacter::getColumnNumber))
-    .collect(Collectors.groupingBy(
-        CRDTCharacter::getLineNumber,
-        LinkedHashMap::new,
-        Collectors.toMap(
-            CRDTCharacter::getColumnNumber,
-            CRDTCharacter::getValue,
-            (existing, replacement) -> existing,
-            LinkedHashMap::new
-        )
-    ));
 
-// Determine the min and max line numbers
-int minLine = structuredLines.keySet().stream().min(Integer::compareTo).orElse(0);
-int maxLine = structuredLines.keySet().stream().max(Integer::compareTo).orElse(-1);
+        // Otherwise build it the same as before
+        int maxColumn = lineMap.keySet().stream().max(Integer::compareTo).orElse(0);
+        StringBuilder lineBuilder = new StringBuilder();
 
-List<String> reconstructedLines = new ArrayList<>();
+        // Pre-fill with spaces
+        for (int i = 0; i <= maxColumn; i++) {
+            lineBuilder.append(' ');
+        }
 
-// Loop through every line from minLine to maxLine
-for (int lineNum = minLine; lineNum <= maxLine; lineNum++) {
+        // Place each character
+        lineMap.forEach((column, value) -> {
+            if (value != null && !value.isEmpty() && column < lineBuilder.length()) {
+            lineBuilder.setCharAt(column, value.charAt(0));
+            }
+        });
 
-  Map<Integer, String> lineMap = structuredLines.get(lineNum);
-  if (lineMap == null) {
-    // If no entry for this line, produce an empty line
-    reconstructedLines.add("");
-    continue;
-  }
+        reconstructedLines.add(lineBuilder.toString());
+        }
 
-  // Otherwise build it the same as before
-  int maxColumn = lineMap.keySet().stream().max(Integer::compareTo).orElse(0);
-  StringBuilder lineBuilder = new StringBuilder();
-
-  // Pre-fill with spaces
-  for (int i = 0; i <= maxColumn; i++) {
-    lineBuilder.append(' ');
-  }
-
-  // Place each character
-  lineMap.forEach((column, value) -> {
-    if (value != null && !value.isEmpty() && column < lineBuilder.length()) {
-      lineBuilder.setCharAt(column, value.charAt(0));
-    }
-  });
-
-  reconstructedLines.add(lineBuilder.toString());
-}
-
-return reconstructedLines;
+        return reconstructedLines;
     }
 }
